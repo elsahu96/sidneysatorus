@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Card, CardContent } from "./ui/card";
-import { Button } from "./ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Check, User, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -93,7 +93,7 @@ export const XAccountSelector = ({ onConfirm, readonly = false, selectedUsername
                     account.matchStrength === "strong" ? "text-primary" : "text-muted-foreground"
                   )} />
                 </div>
-                
+
                 <div className="flex-1 space-y-1">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-foreground">{account.name}</span>

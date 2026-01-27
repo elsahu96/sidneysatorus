@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { GlossaryTerm } from "./GlossaryTerm";
-import { Reference } from "./Reference";
-import { MaritimeVisualization } from "./MaritimeVisualization";
-import { Button } from "./ui/button";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "./ui/sheet";
-import { ScrollArea } from "./ui/scroll-area";
+import { GlossaryTerm } from "@/components/GlossaryTerm";
+import { Reference } from "@/components/Reference";
+import { MaritimeVisualization } from "@/components/MaritimeVisualization";
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { BookMarked, ExternalLink, ChevronDown, ChevronUp } from "lucide-react";
 
 // Reference data with full metadata
@@ -199,7 +199,7 @@ export const IranianPetrochemicalsReport = () => {
         <h2 className="text-2xl font-semibold text-foreground mb-4">
           Executive Summary (BLUF)
         </h2>
-        
+
         <div className="space-y-4">
           <div>
             <h3 className="text-lg font-semibold text-foreground mb-2">Finding</h3>
@@ -255,7 +255,7 @@ export const IranianPetrochemicalsReport = () => {
             <div>
               <h3 className="text-lg font-semibold text-foreground mb-2">2. Collect primary official records</h3>
               <p className="ml-4 text-base text-foreground/90 leading-relaxed">
-                Downloaded OFAC/Treasury designation notices and maritime advisories (in source list). 
+                Downloaded OFAC/Treasury designation notices and maritime advisories (in source list).
                 Record dates, exact names/aliases, and annexe lists of affiliates.
               </p>
             </div>
@@ -263,7 +263,7 @@ export const IranianPetrochemicalsReport = () => {
             <div>
               <h3 className="text-lg font-semibold text-foreground mb-2">3. Gather maritime movement evidence</h3>
               <p className="ml-4 text-base text-foreground/90 leading-relaxed">
-                Pulled AIS/maritime analytics and visualisations (TankerTrackers, MarineTraffic, Lloyd's List Intelligence). 
+                Pulled AIS/maritime analytics and visualisations (TankerTrackers, MarineTraffic, Lloyd's List Intelligence).
                 Export voyage tracks showing AIS gaps.
               </p>
             </div>
@@ -297,7 +297,7 @@ export const IranianPetrochemicalsReport = () => {
         <h2 className="text-2xl font-semibold text-foreground mb-4">
           Company Identifiers (for screening & drafting)
         </h2>
-        
+
         <div className="space-y-4 bg-card/50 border border-border rounded-lg p-6">
           <div>
             <h3 className="text-lg font-semibold text-primary mb-2">PGPIC</h3>

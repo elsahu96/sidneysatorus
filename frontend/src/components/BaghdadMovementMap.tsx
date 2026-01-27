@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { ShieldAlert } from 'lucide-react';
+const MAPBOX_TOKEN = 'pk.eyJ1IjoiaGFycnlhbGRlcm1hbiIsImEiOiJjbWh3YW5jdWEwM2JsMmpzOTdmODgzZmxtIn0.KDp8M1nFNgbaLgLvY4wb9g';
 
 // Restricted zones - areas to avoid
 const restrictedZones = [
@@ -48,8 +49,7 @@ const createCircle = (center: [number, number], radius: number, points: number =
 export const BaghdadMovementMap = () => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
-  const MAPBOX_TOKEN = 'pk.eyJ1IjoiaGFycnlhbGRlcm1hbiIsImEiOiJjbWh3YW5jdWEwM2JsMmpzOTdmODgzZmxtIn0.KDp8M1nFNgbaLgLvY4wb9g';
-
+  
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
 

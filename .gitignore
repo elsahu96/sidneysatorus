@@ -27,3 +27,6 @@ dist-ssr
 */.venv/*
 .vite/*
 .vite
+
+backend/.env
+frontend/.env

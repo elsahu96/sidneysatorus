@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { Ship, AlertTriangle, Key, Play, Pause } from 'lucide-react';
-import { Input } from './ui/input';
-import { Button } from './ui/button';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 
 // Key locations mentioned in the report
 const locations = {
@@ -100,7 +100,7 @@ export const MaritimeVisualization = () => {
         if (currentSegment < totalPoints - 1) {
           const start = route.coordinates[currentSegment];
           const end = route.coordinates[currentSegment + 1];
-          
+
           const lng = start[0] + (end[0] - start[0]) * segmentProgress;
           const lat = start[1] + (end[1] - start[1]) * segmentProgress;
 
@@ -126,7 +126,7 @@ export const MaritimeVisualization = () => {
     if (!mapContainer.current) return;
 
     mapboxgl.accessToken = MAPBOX_TOKEN;
-    
+
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
       style: 'mapbox://styles/mapbox/dark-v11',
@@ -196,7 +196,7 @@ export const MaritimeVisualization = () => {
 
         map.current!.on('mousemove', `route-${index}`, (e) => {
           if (!map.current || !e.lngLat) return;
-          
+
           routePopup
             .setLngLat(e.lngLat)
             .setHTML(
@@ -256,7 +256,7 @@ export const MaritimeVisualization = () => {
         el.style.borderRadius = '50%';
         el.style.border = '3px solid';
         el.style.cursor = 'pointer';
-        
+
         if (location.type === 'origin') {
           el.style.backgroundColor = '#ef4444';
           el.style.borderColor = '#dc2626';
@@ -272,9 +272,9 @@ export const MaritimeVisualization = () => {
           `<div style="padding: 8px; background: rgba(0,0,0,0.9); border-radius: 4px;">
             <strong style="color: #fff; font-size: 14px;">${location.name}</strong>
             <p style="color: #aaa; font-size: 12px; margin: 4px 0 0 0;">
-              ${location.type === 'origin' ? 'Iranian Export Terminal' : 
-                location.type === 'sts' ? 'Ship-to-Ship Transfer Zone' : 
-                'Destination Port'}
+              ${location.type === 'origin' ? 'Iranian Export Terminal' :
+            location.type === 'sts' ? 'Ship-to-Ship Transfer Zone' :
+              'Destination Port'}
             </p>
           </div>`
         );
@@ -338,7 +338,7 @@ export const MaritimeVisualization = () => {
 
       <div className="relative rounded-lg overflow-hidden border border-border bg-card">
         <div ref={mapContainer} className="w-full h-[500px]" />
-        
+
         {/* Legend */}
         <div className="absolute bottom-4 left-4 bg-background/95 backdrop-blur-sm rounded-lg border border-border p-4 space-y-2">
           <div className="text-xs font-semibold text-foreground mb-2">Legend</div>
@@ -360,19 +360,19 @@ export const MaritimeVisualization = () => {
           </div>
           <div className="flex items-center gap-2 text-xs text-foreground/90">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="#ef4444" stroke="#ffffff" strokeWidth="1.5">
-              <path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1 .6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/>
-              <path d="M19.38 20A11.6 11.6 0 0 0 21 14l-9-4-9 4c0 2.9.94 5.34 2.81 7.76"/>
-              <path d="M19 13V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6"/>
+              <path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1 .6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" />
+              <path d="M19.38 20A11.6 11.6 0 0 0 21 14l-9-4-9 4c0 2.9.94 5.34 2.81 7.76" />
+              <path d="M19 13V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6" />
             </svg>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="#f59e0b" stroke="#ffffff" strokeWidth="1.5">
-              <path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1 .6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/>
-              <path d="M19.38 20A11.6 11.6 0 0 0 21 14l-9-4-9 4c0 2.9.94 5.34 2.81 7.76"/>
-              <path d="M19 13V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6"/>
+              <path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1 .6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" />
+              <path d="M19.38 20A11.6 11.6 0 0 0 21 14l-9-4-9 4c0 2.9.94 5.34 2.81 7.76" />
+              <path d="M19 13V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6" />
             </svg>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="#3b82f6" stroke="#ffffff" strokeWidth="1.5">
-              <path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1 .6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/>
-              <path d="M19.38 20A11.6 11.6 0 0 0 21 14l-9-4-9 4c0 2.9.94 5.34 2.81 7.76"/>
-              <path d="M19 13V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6"/>
+              <path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1 .6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" />
+              <path d="M19.38 20A11.6 11.6 0 0 0 21 14l-9-4-9 4c0 2.9.94 5.34 2.81 7.76" />
+              <path d="M19 13V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6" />
             </svg>
             <span>Active Route Vessels</span>
           </div>

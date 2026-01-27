@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { Badge } from "./ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { Reference } from "./Reference";
-import { GlossaryTerm } from "./GlossaryTerm";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "./ui/sheet";
-import { Button } from "./ui/button";
-import { ScrollArea } from "./ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Reference } from "@/components/Reference";
+import { GlossaryTerm } from "@/components/GlossaryTerm";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { BookMarked, ExternalLink } from "lucide-react";
 
 // Reference data structure

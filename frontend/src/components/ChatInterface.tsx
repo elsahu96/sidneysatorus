@@ -2,13 +2,13 @@ import { useState, useRef, useEffect } from "react";
 import { Send, Loader2, Home, Plus } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { InvestigationReport } from "./InvestigationReport";
-import { XAccountSelector } from "./XAccountSelector";
-import { RussellCherryReport } from "./RussellCherryReport";
-import { IranianPetrochemicalsReport } from "./IranianPetrochemicalsReport";
-import { LoadingStages } from "./LoadingStages";
+import { InvestigationReport } from "@/components/InvestigationReport";
+import { XAccountSelector } from "@/components/XAccountSelector";
+import { RussellCherryReport } from "@/components/RussellCherryReport";
+import { IranianPetrochemicalsReport } from "@/components/IranianPetrochemicalsReport";
+import { LoadingStages } from "@/components/LoadingStages";
 import { useCaseFiles } from "@/contexts/CaseFilesContext";
-import { Button } from "./ui/button";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 interface Message {
@@ -69,7 +69,7 @@ export const ChatInterface = () => {
         isAccountSelector: true
       };
     }
-    
+
     // Check if query mentions Roman Abramovich
     if (query.toLowerCase().includes("roman abramovich")) {
       setLoadingStages([
@@ -104,7 +104,7 @@ export const ChatInterface = () => {
         isIranianPetrochemicalsReport: true
       };
     }
-    
+
     await new Promise(resolve => setTimeout(resolve, 1500));
     return {
       role: "assistant",
@@ -124,18 +124,18 @@ export const ChatInterface = () => {
     ]);
     await new Promise(resolve => setTimeout(resolve, 7500)); // 5 stages * 1.5 seconds
     setLoadingStages([]);
-    
+
     const reportMessage: Message = {
       role: "assistant",
       content: "Russell Cherry Investigation Report",
       isRussellCherryReport: true,
       selectedAccount: username
     };
-    
+
     const updatedMessages = [...messages, reportMessage];
     setMessages(updatedMessages);
     setIsLoading(false);
-    
+
     // Save to case files
     const subject = "Russell Cherry";
     const caseFile = {
@@ -167,12 +167,12 @@ export const ChatInterface = () => {
       const response = await mockInvestigation(input);
       const updatedMessages = [...messages, userMessage, response];
       setMessages(prev => [...prev, response]);
-      
+
       // Only save to case files for completed investigations (not account selectors)
       if (!response.isAccountSelector) {
         // Extract subject name from response content
         const subject = response.content;
-        
+
         // Determine category based on subject
         let category: "Russell Cherry" | "Roman Abramovich" | "Iranian Petrochemicals" | "Other" = "Other";
         if (subject.toLowerCase().includes("russell cherry")) {
@@ -182,7 +182,7 @@ export const ChatInterface = () => {
         } else if (subject.toLowerCase().includes("iranian petrochemicals")) {
           category = "Iranian Petrochemicals";
         }
-        
+
         const caseFile = {
           id: Date.now().toString(),
           caseNumber: subject,
@@ -322,8 +322,8 @@ export const ChatInterface = () => {
               {messages.map((message, index) => (
                 <div key={index} className={cn(
                   "rounded-lg p-4",
-                  message.role === "user" 
-                    ? "bg-card border border-border ml-auto max-w-2xl" 
+                  message.role === "user"
+                    ? "bg-card border border-border ml-auto max-w-2xl"
                     : "bg-background"
                 )}>
                   {message.role === "user" ? (
