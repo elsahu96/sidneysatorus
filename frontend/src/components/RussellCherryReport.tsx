@@ -209,10 +209,10 @@ export const RussellCherryReport = ({ username }: RussellCherryReportProps) => {
           </CardTitle>
         </CardHeader>
         <CardContent className="text-base leading-relaxed text-[hsl(var(--report-text))]">
-          The investigation into Russell Cherry's X (formerly Twitter) profile (@{username}) reveals a strong affiliation 
-          with the UK Independence Party (UKIP) and pronounced political views centered on anti-immigration, pro-Brexit 
-          sentiments, and concerns regarding law enforcement. Several posts contain statements that could be considered 
-          controversial, particularly those expressing alarmist views on immigration and linking it to potential societal 
+          The investigation into Russell Cherry's X (formerly Twitter) profile (@{username}) reveals a strong affiliation
+          with the UK Independence Party (UKIP) and pronounced political views centered on anti-immigration, pro-Brexit
+          sentiments, and concerns regarding law enforcement. Several posts contain statements that could be considered
+          controversial, particularly those expressing alarmist views on immigration and linking it to potential societal
           threats and European destabilization.
         </CardContent>
       </Card>
@@ -228,7 +228,7 @@ export const RussellCherryReport = ({ username }: RussellCherryReportProps) => {
         <CardContent className="space-y-5 text-base">
           <div>
             <p className="text-[hsl(var(--report-text))] mb-4">
-              Russell Cherry's X activity clearly indicates a strong alignment with the UK Independence Party (UKIP). 
+              Russell Cherry's X activity clearly indicates a strong alignment with the UK Independence Party (UKIP).
               His posts frequently reference UKIP candidates and policies:
             </p>
             <ul className="space-y-3">
@@ -363,7 +363,7 @@ export const RussellCherryReport = ({ username }: RussellCherryReportProps) => {
             <div>
               <p className="font-semibold text-foreground mb-3">Reporting Offensive Graffiti:</p>
               <p className="text-[hsl(var(--report-text))]">
-                While not controversial in itself, one post mentions him requesting the council to clean graffiti that 
+                While not controversial in itself, one post mentions him requesting the council to clean graffiti that
                 "had a swastika & other offensive graffiti," indicating his awareness and response to such symbols.
                 <Reference {...references[10]} />
               </p>
@@ -372,7 +372,7 @@ export const RussellCherryReport = ({ username }: RussellCherryReportProps) => {
             <div>
               <p className="font-semibold text-foreground mb-3">Criticism of EU Officials:</p>
               <p className="text-[hsl(var(--report-text))]">
-                He describes democratically elected European governments as "bending the knee to EU officials who we do not know" 
+                He describes democratically elected European governments as "bending the knee to EU officials who we do not know"
                 and refers to "these idiots in charge of Europe."
                 <Reference {...references[11]} />
               </p>
