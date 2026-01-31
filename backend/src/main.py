@@ -1,15 +1,17 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from logging import Logger
+from fastapi import FastAPI, HTTPException
 from prisma import Prisma
-from contextlib import asynccontextmanager
-import os
 from dotenv import load_dotenv
+from contextlib import asynccontextmanager
+from fastapi.middleware.cors import CORSMiddleware
+from backend.src.services.investigator import OSINTInvestigatorService
 
 # Load environment variables
 load_dotenv()
 
 # Initialize Prisma client
 db = Prisma()
+logger = Logger(__name__)
 
 
 @asynccontextmanager
@@ -22,7 +24,7 @@ async def lifespan(app: FastAPI):
 
 
 # Initialize FastAPI app
-app = FastAPI(title="Lovable Backend API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Sidney Backend API", version="1.0.0", lifespan=lifespan)
 
 # Configure CORS
 app.add_middleware(
@@ -61,3 +63,11 @@ async def create_user(email: str, name: str = None):
     return {"user": user}
 
 
+@app.post("/investigate")
+async def investigate(query: str):
+    try:
+        logger.info(f"Investigating query: {query}")
+        investigation = await OSINTInvestigatorService().analyze_query(query)
+        return investigation
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

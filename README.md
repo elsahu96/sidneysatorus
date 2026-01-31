@@ -36,7 +36,18 @@
    python run.py
    ```
 
+### Docker (Backend)
 
+To run the backend service using Docker:
+
+1. Build the Docker image:
+   ```sh
+   docker build -t backend-service backend/
+   ```
+2. Run the container:
+   ```sh
+   docker run -p 8080:8080 backend-service
+   ```
 
 **Use GitHub Codespaces**
 
