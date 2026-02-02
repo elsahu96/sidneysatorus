@@ -35,4 +35,4 @@ EXPOSE 8080
 
 # Command to run the application
 # Using run.py as the entry point based on the project structure
-CMD ["python", "main.py"]
+CMD ["python", "run.py"]

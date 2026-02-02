@@ -36,7 +36,9 @@
    python run.py
    ```
 
-### Docker (Backend)
+### Docker
+
+#### Backend
 
 To run the backend service using Docker:
 
@@ -48,6 +50,27 @@ To run the backend service using Docker:
    ```sh
    docker run -p 8080:8080 backend-service
    ```
+
+#### Frontend
+
+To run the frontend service using Docker:
+
+1. Build the Docker image:
+   ```sh
+   docker build -t frontend-service frontend/
+   ```
+2. Run the container:
+   ```sh
+   docker run -p 4567:8567 frontend-service
+   ```
+
+### Docker Compose (Recommended)
+
+To run both frontend and backend together:
+
+```sh
+docker-compose up --build
+```
 
 **Use GitHub Codespaces**
 

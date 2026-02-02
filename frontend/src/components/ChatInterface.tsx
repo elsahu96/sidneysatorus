@@ -10,6 +10,8 @@ import { LoadingStages } from "@/components/LoadingStages";
 import { useCaseFiles } from "@/contexts/CaseFilesContext";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import apiClient from "@/lib/api";
+import ReactMarkdown from "react-markdown";
 
 interface Message {
   role: "user" | "assistant";
@@ -18,6 +20,7 @@ interface Message {
   isAccountSelector?: boolean;
   isRussellCherryReport?: boolean;
   isIranianPetrochemicalsReport?: boolean;
+  isMarkdown?: boolean;
   selectedAccount?: string;
 }
 
@@ -51,6 +54,38 @@ export const ChatInterface = () => {
       textareaRef.current.style.height = textareaRef.current.scrollHeight + "px";
     }
   }, [input]);
+
+  const performInvestigation = async (query: string): Promise<Message> => {
+    setLoadingStages([
+      "Understanding request",
+      "Analyzing query context",
+      "Generating investigation plan",
+      "Accessing data sources",
+      "Synthesizing findings"
+    ]);
+
+    try {
+      console.log('query', query);
+      const response = await apiClient.post("/investigate", { query: query });
+      console.log('response', response.data);
+      setLoadingStages([]);
+
+      const data = response.data;
+
+      return {
+        role: "assistant",
+        content: data.formatted_report || data.query_understanding || "Investigation complete.",
+        isMarkdown: true,
+      };
+    } catch (error: any) {
+      setLoadingStages([]);
+      toast.error("Investigation failed: " + (error.response?.data?.detail || error.message));
+      return {
+        role: "assistant",
+        content: "Sorry, I encountered an error during the investigation.",
+      };
+    }
+  };
 
   const mockInvestigation = async (query: string): Promise<Message> => {
     // Check if query mentions Russell Cherry
@@ -164,29 +199,29 @@ export const ChatInterface = () => {
     setIsLoading(true);
 
     try {
-      const response = await mockInvestigation(input);
+      const response = await performInvestigation(input);
       const updatedMessages = [...messages, userMessage, response];
       setMessages(prev => [...prev, response]);
 
       // Only save to case files for completed investigations (not account selectors)
       if (!response.isAccountSelector) {
         // Extract subject name from response content
-        const subject = response.content;
+        const subject = response.content.slice(0, 50) + (response.content.length > 50 ? "..." : "");
 
-        // Determine category based on subject
+        // Determine category
         let category: "Russell Cherry" | "Roman Abramovich" | "Iranian Petrochemicals" | "Other" = "Other";
-        if (subject.toLowerCase().includes("russell cherry")) {
+        if (input.toLowerCase().includes("russell cherry")) {
           category = "Russell Cherry";
-        } else if (subject.toLowerCase().includes("roman abramovich")) {
+        } else if (input.toLowerCase().includes("roman abramovich")) {
           category = "Roman Abramovich";
-        } else if (subject.toLowerCase().includes("iranian petrochemicals")) {
+        } else if (input.toLowerCase().includes("iranian petrochemicals")) {
           category = "Iranian Petrochemicals";
         }
 
         const caseFile = {
           id: Date.now().toString(),
-          caseNumber: subject,
-          subject: subject,
+          caseNumber: `INV-${Date.now().toString().slice(-6)}`,
+          subject: input.slice(0, 100),
           timestamp: Date.now(),
           category,
           messages: updatedMessages
@@ -336,6 +371,10 @@ export const ChatInterface = () => {
                     <RussellCherryReport username={message.selectedAccount || "russcherry5"} />
                   ) : message.isIranianPetrochemicalsReport ? (
                     <IranianPetrochemicalsReport />
+                  ) : message.isMarkdown ? (
+                    <div className="prose prose-sm dark:prose-invert max-w-none">
+                      <ReactMarkdown>{message.content}</ReactMarkdown>
+                    </div>
                   ) : (
                     <p className="text-sm text-muted-foreground">{message.content}</p>
                   )}
