@@ -1,7 +1,8 @@
-import { Home, Search, Globe, FolderOpen, Settings, LogOut, ChevronLeft, ChevronRight } from "lucide-react";
-import { NavLink } from "react-router-dom";
+import { Home, Globe, FolderOpen, Settings, LogOut, ChevronLeft, ChevronRight } from "lucide-react";
+import { NavLink, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useSidebarContext } from "@/contexts/SidebarContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 const navigationItems = [
   { title: "Home", icon: Home, path: "/", resetChat: true },
@@ -12,6 +13,13 @@ const navigationItems = [
 
 export const Sidebar = () => {
   const { isCollapsed, setIsCollapsed } = useSidebarContext();
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/login", { replace: true });
+  };
 
   return (
     <aside className={cn(
@@ -66,19 +74,21 @@ export const Sidebar = () => {
           })}
         </nav>
 
-        {/* Logout at bottom */}
+        {/* Sign out at bottom */}
         <div className="border-t border-border p-3">
           <button
+            type="button"
+            onClick={handleSignOut}
             className={cn(
               "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all",
               "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               isCollapsed && "justify-center"
             )}
-            title={isCollapsed ? "Logout" : undefined}
+            title={isCollapsed ? "Sign out" : undefined}
           >
             <LogOut className="h-4 w-4 shrink-0" />
-            {!isCollapsed && "Logout"}
+            {!isCollapsed && "Sign out"}
           </button>
         </div>
       </div>

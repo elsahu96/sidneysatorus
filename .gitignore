@@ -27,8 +27,10 @@ dist-ssr
 */.venv/*
 .vite/*
 .vite
+# Python
+__pycache__/
+*.pyc
+*.pyo
 
 backend/.env
 frontend/.env
-*/__pycache__/*
-*/__pycache__/*.pyc

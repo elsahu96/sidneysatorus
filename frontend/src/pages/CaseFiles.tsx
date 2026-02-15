@@ -42,16 +42,16 @@ import { TaiwanReport } from "@/components/TaiwanReport";
 import { LoadingStages } from "@/components/LoadingStages";
 
 const CaseFiles = () => {
-  const { 
-    caseFiles, 
-    folders, 
+  const {
+    caseFiles,
+    folders,
     projects,
     addCaseFile,
-    deleteCaseFile, 
-    renameCaseFile, 
-    moveCaseToFolder, 
-    createFolder, 
-    deleteFolder, 
+    deleteCaseFile,
+    renameCaseFile,
+    moveCaseToFolder,
+    createFolder,
+    deleteFolder,
     renameFolder,
     createProject,
     deleteProject,
@@ -76,7 +76,7 @@ const CaseFiles = () => {
   const [deleteFolderDialogOpen, setDeleteFolderDialogOpen] = useState(false);
   const [renameFolderDialogOpen, setRenameFolderDialogOpen] = useState(false);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
-  
+
   // Projects state
   const [createProjectDialogOpen, setCreateProjectDialogOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
@@ -90,7 +90,7 @@ const CaseFiles = () => {
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
   const [projectActiveTab, setProjectActiveTab] = useState<"chat" | "reports" | "documents">("chat");
   const chatTextareaRef = useRef<HTMLTextAreaElement>(null);
-  
+
   // Bulk selection state
   const [selectedCaseIds, setSelectedCaseIds] = useState<Set<string>>(new Set());
   const [selectedReportIds, setSelectedReportIds] = useState<Set<string>>(new Set());
@@ -253,7 +253,7 @@ const CaseFiles = () => {
 
     return sorted;
   }, [caseFiles, searchQuery, selectedFolder, sortBy]);
-  
+
   // Projects functions
   const handleCreateProject = () => {
     if (newProjectName.trim()) {
@@ -280,7 +280,7 @@ const CaseFiles = () => {
       };
       addDocumentToProject(selectedProject.id, document);
     });
-    
+
     toast.success(`${files.length} document(s) uploaded`);
     e.target.value = "";
   };
@@ -316,17 +316,17 @@ const CaseFiles = () => {
         "Synthesis to actions"
       ];
       setLoadingStages(taiwanStages);
-      
+
       // Wait for all stages to complete (8 stages * 750ms = 6000ms)
       await new Promise(resolve => setTimeout(resolve, 6000));
-      
+
       setLoadingStages([]);
       const assistantMessage = {
         role: "assistant" as const,
         content: "TAIWAN_REPORT"
       };
       addChatMessageToProject(selectedProject.id, assistantMessage);
-      
+
       // Save the report to both the project AND the main case files
       const report: CaseFile = {
         id: Date.now().toString(),
@@ -341,7 +341,7 @@ const CaseFiles = () => {
       };
       addReportToProject(selectedProject.id, report);
       addCaseFile(report); // Also add to main case files so it can be viewed
-      
+
       toast.success("Report generated and saved");
     } else {
       // Mock AI response for other queries
@@ -354,7 +354,7 @@ const CaseFiles = () => {
     }
     setIsLoadingChat(false);
   };
-  
+
   const handleSuggestedPrompt = (prompt: string) => {
     setChatInput(prompt);
   };
@@ -582,7 +582,7 @@ const CaseFiles = () => {
                 <h1 className="text-xl font-semibold text-foreground">{selectedProject.name}</h1>
               </div>
             </div>
-            
+
             {/* Tabs */}
             <div className="flex items-center justify-between gap-4">
               <Tabs value={projectActiveTab} onValueChange={(v) => setProjectActiveTab(v as any)} className="flex-1">
@@ -601,7 +601,7 @@ const CaseFiles = () => {
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
-              
+
               {/* New Chat Button - only show when on chat tab and has messages */}
               {projectActiveTab === "chat" && selectedProject.chatHistory.length > 0 && (
                 <Button
@@ -617,180 +617,85 @@ const CaseFiles = () => {
 
           {/* Tab Content */}
           {projectActiveTab === "chat" && (
-          <div className="flex-1 flex flex-col px-4">
-            {selectedProject.chatHistory.length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center py-8">
-                <div className="mb-8 text-center">
-                  <h2 className="mb-2 text-3xl font-semibold text-foreground">
-                    {selectedProject.name}
-                  </h2>
-                  {selectedProject.description && (
-                    <p className="text-sm text-muted-foreground">
-                      {selectedProject.description}
-                    </p>
-                  )}
-                </div>
+            <div className="flex-1 flex flex-col px-4">
+              {selectedProject.chatHistory.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center py-8">
+                  <div className="mb-8 text-center">
+                    <h2 className="mb-2 text-3xl font-semibold text-foreground">
+                      {selectedProject.name}
+                    </h2>
+                    {selectedProject.description && (
+                      <p className="text-sm text-muted-foreground">
+                        {selectedProject.description}
+                      </p>
+                    )}
+                  </div>
 
-                {/* Documents & Reports Summary */}
-                <div className="flex gap-3 mb-6 max-w-2xl w-full">
-                  {/* Documents Card */}
-                  {selectedProject.documents.length > 0 && (
+                  {/* Documents & Reports Summary */}
+                  <div className="flex gap-3 mb-6 max-w-2xl w-full">
+                    {/* Documents Card */}
+                    {selectedProject.documents.length > 0 && (
+                      <Card className="flex-1 p-3 hover:border-primary/50 transition-colors">
+                        <div className="flex items-center gap-2 mb-2">
+                          <File className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="text-xs font-medium text-foreground">
+                            {selectedProject.documents.length} {selectedProject.documents.length === 1 ? 'doc' : 'docs'}
+                          </span>
+                        </div>
+                        <div className="space-y-1">
+                          {selectedProject.documents.slice(0, 2).map((doc) => (
+                            <button
+                              key={doc.id}
+                              onClick={() => window.open(doc.url, '_blank')}
+                              className="text-xs text-muted-foreground hover:text-primary truncate block w-full text-left transition-colors"
+                            >
+                              • {doc.name}
+                            </button>
+                          ))}
+                          {selectedProject.documents.length > 2 && (
+                            <div className="text-xs text-muted-foreground">
+                              • +{selectedProject.documents.length - 2} more
+                            </div>
+                          )}
+                        </div>
+                      </Card>
+                    )}
+
+                    {/* Reports Card */}
                     <Card className="flex-1 p-3 hover:border-primary/50 transition-colors">
                       <div className="flex items-center gap-2 mb-2">
-                        <File className="h-3.5 w-3.5 text-muted-foreground" />
+                        <FileText className="h-3.5 w-3.5 text-muted-foreground" />
                         <span className="text-xs font-medium text-foreground">
-                          {selectedProject.documents.length} {selectedProject.documents.length === 1 ? 'doc' : 'docs'}
+                          {selectedProject.reports.length} {selectedProject.reports.length === 1 ? 'report' : 'reports'}
                         </span>
                       </div>
-                      <div className="space-y-1">
-                        {selectedProject.documents.slice(0, 2).map((doc) => (
-                          <button
-                            key={doc.id}
-                            onClick={() => window.open(doc.url, '_blank')}
-                            className="text-xs text-muted-foreground hover:text-primary truncate block w-full text-left transition-colors"
-                          >
-                            • {doc.name}
-                          </button>
-                        ))}
-                        {selectedProject.documents.length > 2 && (
-                          <div className="text-xs text-muted-foreground">
-                            • +{selectedProject.documents.length - 2} more
-                          </div>
-                        )}
-                      </div>
+                      {selectedProject.reports.length > 0 ? (
+                        <div className="space-y-1">
+                          {selectedProject.reports.slice(0, 2).map((report) => (
+                            <div key={report.id} className="text-xs text-muted-foreground truncate">
+                              • {report.caseNumber}
+                            </div>
+                          ))}
+                          {selectedProject.reports.length > 2 && (
+                            <div className="text-xs text-muted-foreground">
+                              • +{selectedProject.reports.length - 2} more
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground/60">No reports yet</p>
+                      )}
                     </Card>
-                  )}
-
-                  {/* Reports Card */}
-                  <Card className="flex-1 p-3 hover:border-primary/50 transition-colors">
-                    <div className="flex items-center gap-2 mb-2">
-                      <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="text-xs font-medium text-foreground">
-                        {selectedProject.reports.length} {selectedProject.reports.length === 1 ? 'report' : 'reports'}
-                      </span>
-                    </div>
-                    {selectedProject.reports.length > 0 ? (
-                      <div className="space-y-1">
-                        {selectedProject.reports.slice(0, 2).map((report) => (
-                          <div key={report.id} className="text-xs text-muted-foreground truncate">
-                            • {report.caseNumber}
-                          </div>
-                        ))}
-                        {selectedProject.reports.length > 2 && (
-                          <div className="text-xs text-muted-foreground">
-                            • +{selectedProject.reports.length - 2} more
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-muted-foreground/60">No reports yet</p>
-                    )}
-                  </Card>
-                </div>
-
-                {/* Chat Input */}
-                <form onSubmit={handleChatSubmit} className="w-full max-w-3xl">
-                  <div className={cn(
-                    "relative rounded-lg border bg-card transition-all duration-150",
-                    "border-border"
-                  )}>
-                    <textarea
-                      ref={chatTextareaRef}
-                      value={chatInput}
-                      onChange={(e) => setChatInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          handleChatSubmit(e);
-                        }
-                      }}
-                      placeholder="Ask about your documents, request analysis, or generate reports..."
-                      rows={1}
-                      className={cn(
-                        "w-full resize-none bg-transparent px-4 py-3 pr-12 text-base text-foreground",
-                        "placeholder:text-muted-foreground/50",
-                        "focus:outline-none max-h-40 overflow-y-auto leading-relaxed"
-                      )}
-                    />
-                    <button
-                      type="submit"
-                      disabled={!chatInput.trim() || isLoadingChat}
-                      className={cn(
-                        "absolute right-3 bottom-3 rounded-md p-1.5 transition-all duration-150",
-                        chatInput.trim() && !isLoadingChat
-                          ? "text-primary hover:bg-primary/10"
-                          : "text-muted-foreground/30 cursor-not-allowed"
-                      )}
-                    >
-                      {isLoadingChat ? (
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                      ) : (
-                        <Send className="h-5 w-5" />
-                      )}
-                    </button>
                   </div>
-                </form>
-                
-                {/* Suggested Prompts */}
-                <div className="mt-6 flex flex-wrap gap-2 justify-center max-w-3xl">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleSuggestedPrompt("Give me a news roundup from the last month of everything related to my TechForward project.")}
-                    className="text-sm"
-                  >
-                    News Roundup
-                  </Button>
-                </div>
-                
-                {/* Loading Stages */}
-                {isLoadingChat && loadingStages.length > 0 && (
-                  <div className="mt-6">
-                    <LoadingStages stages={loadingStages} duration={750} />
-                  </div>
-                )}
-              </div>
-            ) : (
-              <>
-                {/* Chat Messages */}
-                <div className="py-8 space-y-6 max-w-4xl mx-auto w-full px-4">
-                  {selectedProject.chatHistory.map((message, index) => (
-                    <div key={index}>
-                      {message.role === "user" ? (
-                        <div className="bg-card border border-border rounded-lg p-4 ml-auto max-w-2xl">
-                          <p className="text-sm text-foreground">{message.content}</p>
-                        </div>
-                      ) : message.content === "TAIWAN_REPORT" ? (
-                        <TaiwanReport />
-                      ) : (
-                        <div className="bg-background rounded-lg p-4">
-                          <p className="text-sm text-foreground">{message.content}</p>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                  {isLoadingChat && (
-                    <>
-                      {loadingStages.length > 0 ? (
-                        <LoadingStages stages={loadingStages} duration={750} />
-                      ) : (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          <span>Thinking...</span>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
 
-                {/* Fixed Input at Bottom */}
-                <div className="border-t border-border bg-background py-4">
-                  <form onSubmit={handleChatSubmit} className="max-w-4xl mx-auto w-full px-4">
+                  {/* Chat Input */}
+                  <form onSubmit={handleChatSubmit} className="w-full max-w-3xl">
                     <div className={cn(
                       "relative rounded-lg border bg-card transition-all duration-150",
                       "border-border"
                     )}>
                       <textarea
+                        ref={chatTextareaRef}
                         value={chatInput}
                         onChange={(e) => setChatInput(e.target.value)}
                         onKeyDown={(e) => {
@@ -825,10 +730,105 @@ const CaseFiles = () => {
                       </button>
                     </div>
                   </form>
+
+                  {/* Suggested Prompts */}
+                  <div className="mt-6 flex flex-wrap gap-2 justify-center max-w-3xl">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleSuggestedPrompt("Give me a news roundup from the last month of everything related to my TechForward project.")}
+                      className="text-sm"
+                    >
+                      News Roundup
+                    </Button>
+                  </div>
+
+                  {/* Loading Stages */}
+                  {isLoadingChat && loadingStages.length > 0 && (
+                    <div className="mt-6">
+                      <LoadingStages stages={loadingStages} duration={750} />
+                    </div>
+                  )}
                 </div>
-              </>
-            )}
-          </div>
+              ) : (
+                <>
+                  {/* Chat Messages */}
+                  <div className="py-8 space-y-6 max-w-4xl mx-auto w-full px-4">
+                    {selectedProject.chatHistory.map((message, index) => (
+                      <div key={index}>
+                        {message.role === "user" ? (
+                          <div className="bg-card border border-border rounded-lg p-4 ml-auto max-w-2xl">
+                            <p className="text-sm text-foreground">{message.content}</p>
+                          </div>
+                        ) : message.content === "TAIWAN_REPORT" ? (
+                          <TaiwanReport />
+                        ) : (
+                          <div className="bg-background rounded-lg p-4">
+                            <p className="text-sm text-foreground">{message.content}</p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {isLoadingChat && (
+                      <>
+                        {loadingStages.length > 0 ? (
+                          <LoadingStages stages={loadingStages} duration={750} />
+                        ) : (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span>Thinking...</span>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Fixed Input at Bottom */}
+                  <div className="border-t border-border bg-background py-4">
+                    <form onSubmit={handleChatSubmit} className="max-w-4xl mx-auto w-full px-4">
+                      <div className={cn(
+                        "relative rounded-lg border bg-card transition-all duration-150",
+                        "border-border"
+                      )}>
+                        <textarea
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              handleChatSubmit(e);
+                            }
+                          }}
+                          placeholder="Ask about your documents, request analysis, or generate reports..."
+                          rows={1}
+                          className={cn(
+                            "w-full resize-none bg-transparent px-4 py-3 pr-12 text-base text-foreground",
+                            "placeholder:text-muted-foreground/50",
+                            "focus:outline-none max-h-40 overflow-y-auto leading-relaxed"
+                          )}
+                        />
+                        <button
+                          type="submit"
+                          disabled={!chatInput.trim() || isLoadingChat}
+                          className={cn(
+                            "absolute right-3 bottom-3 rounded-md p-1.5 transition-all duration-150",
+                            chatInput.trim() && !isLoadingChat
+                              ? "text-primary hover:bg-primary/10"
+                              : "text-muted-foreground/30 cursor-not-allowed"
+                          )}
+                        >
+                          {isLoadingChat ? (
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                          ) : (
+                            <Send className="h-5 w-5" />
+                          )}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </>
+              )}
+            </div>
           )}
 
           {/* Reports Tab */}
@@ -838,7 +838,7 @@ const CaseFiles = () => {
                 <div className="flex flex-col items-center justify-center h-full">
                   <FileText className="h-12 w-12 text-muted-foreground mb-4" />
                   <p className="text-muted-foreground text-center">
-                    No reports generated yet.<br/>
+                    No reports generated yet.<br />
                     Use the Chat tab to generate reports.
                   </p>
                 </div>
@@ -879,7 +879,7 @@ const CaseFiles = () => {
                       </div>
                     )}
                   </div>
-                  
+
                   {selectedProject.reports.map((report) => (
                     <Card
                       key={report.id}
@@ -903,21 +903,21 @@ const CaseFiles = () => {
                               <Square className="h-5 w-5 text-muted-foreground" />
                             )}
                           </button>
-                          <div 
+                          <div
                             className="flex-1 cursor-pointer"
                             onClick={() => navigate(`/case/${report.id}`)}
                           >
-                          <h3 className="font-semibold text-foreground mb-1">
-                            {report.caseNumber}
-                          </h3>
-                          <p className="text-sm text-muted-foreground mb-2">
-                            {report.subject}
-                          </p>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Calendar className="h-3 w-3" />
-                            <span>{formatDate(report.timestamp)}</span>
+                            <h3 className="font-semibold text-foreground mb-1">
+                              {report.caseNumber}
+                            </h3>
+                            <p className="text-sm text-muted-foreground mb-2">
+                              {report.subject}
+                            </p>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Calendar className="h-3 w-3" />
+                              <span>{formatDate(report.timestamp)}</span>
+                            </div>
                           </div>
-                        </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <Badge variant="outline">Report</Badge>
@@ -1013,7 +1013,7 @@ const CaseFiles = () => {
                   <div className="flex flex-col items-center justify-center h-64">
                     <File className="h-12 w-12 text-muted-foreground mb-4" />
                     <p className="text-muted-foreground text-center">
-                      No documents uploaded yet.<br/>
+                      No documents uploaded yet.<br />
                       Click "Add files" to upload documents.
                     </p>
                   </div>
@@ -1039,10 +1039,10 @@ const CaseFiles = () => {
                         )}
                       </Button>
                     </div>
-                    
+
                     {selectedProject.documents.map((doc) => (
-                      <Card 
-                        key={doc.id} 
+                      <Card
+                        key={doc.id}
                         className={cn(
                           "p-4",
                           selectedDocumentIds.has(doc.id) && "border-primary bg-primary/5"
@@ -1119,318 +1119,318 @@ const CaseFiles = () => {
 
             <TabsContent value="people" className="space-y-6">
               {/* Search and Controls */}
-          <div className="mb-6 space-y-4">
-            {/* Search Bar */}
-            <div className="flex gap-3">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search case files..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="min-w-[140px]">
-                    <ArrowUpDown className="h-4 w-4 mr-2" />
-                    {sortBy === "date-desc" && "Newest First"}
-                    {sortBy === "date-asc" && "Oldest First"}
-                    {sortBy === "name" && "By Name"}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="bg-popover z-50">
-                  <DropdownMenuItem onClick={() => setSortBy("date-desc")} className="cursor-pointer">
-                    Newest First
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSortBy("date-asc")} className="cursor-pointer">
-                    Oldest First
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSortBy("name")} className="cursor-pointer">
-                    By Name
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <Button onClick={() => setCreateFolderDialogOpen(true)}>
-                <FolderPlus className="h-4 w-4 mr-2" />
-                New Folder
-              </Button>
-            </div>
-            
-            {/* Bulk Actions Toolbar */}
-            {selectedCaseIds.size > 0 && (
-              <Card className="p-3 border-primary/50 bg-primary/5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setSelectedCaseIds(new Set())}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                    <span className="text-sm font-medium text-foreground">
-                      {selectedCaseIds.size} selected
-                    </span>
+              <div className="mb-6 space-y-4">
+                {/* Search Bar */}
+                <div className="flex gap-3">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search case files..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-10"
+                    />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={handleBulkDeleteCases}
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Delete
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            )}
-
-            {/* Folder Tabs */}
-            <div className="flex gap-2 overflow-x-auto pb-2">
-              <Button
-                variant={selectedFolder === "all" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setSelectedFolder("all")}
-              >
-                All ({caseFiles.filter(f => !f.projectId).length})
-              </Button>
-              <Button
-                variant={selectedFolder === "uncategorized" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setSelectedFolder("uncategorized")}
-              >
-                Uncategorized ({getCaseCountForFolder("uncategorized")})
-              </Button>
-              {folders.map((folder) => (
-                <div key={folder.id} className="relative group">
-                  <Button
-                    variant={selectedFolder === folder.id ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setSelectedFolder(folder.id)}
-                    className="pr-8"
-                  >
-                    <Folder className="h-3 w-3 mr-2" />
-                    {folder.name} ({getCaseCountForFolder(folder.id)})
-                  </Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <button
-                        className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <MoreVertical className="h-3 w-3" />
-                      </button>
+                      <Button variant="outline" className="min-w-[140px]">
+                        <ArrowUpDown className="h-4 w-4 mr-2" />
+                        {sortBy === "date-desc" && "Newest First"}
+                        {sortBy === "date-asc" && "Oldest First"}
+                        {sortBy === "name" && "By Name"}
+                      </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="bg-popover z-50">
-                      <DropdownMenuItem
-                        onClick={() => handleRenameFolder(folder.id, folder.name)}
-                        className="cursor-pointer"
-                      >
-                        <Edit2 className="h-4 w-4 mr-2" />
-                        Rename
+                      <DropdownMenuItem onClick={() => setSortBy("date-desc")} className="cursor-pointer">
+                        Newest First
                       </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => handleDeleteFolder(folder.id)}
-                        className="cursor-pointer text-destructive focus:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete
+                      <DropdownMenuItem onClick={() => setSortBy("date-asc")} className="cursor-pointer">
+                        Oldest First
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setSortBy("name")} className="cursor-pointer">
+                        By Name
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Case Files Grid */}
-          {caseFiles.length === 0 ? (
-            <Card className="p-12 text-center">
-              <FolderOpen className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-foreground mb-2">No case files yet</h3>
-              <p className="text-sm text-muted-foreground">
-                Start an investigation from the home page to create your first case file.
-              </p>
-            </Card>
-          ) : filteredAndSortedCaseFiles.length === 0 ? (
-            <Card className="p-12 text-center">
-              <Search className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-foreground mb-2">No matching case files</h3>
-              <p className="text-sm text-muted-foreground">
-                Try adjusting your search or filter criteria.
-              </p>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {/* Select All Button */}
-              {filteredAndSortedCaseFiles.length > 0 && (
-                <div className="col-span-full mb-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={toggleAllCasesSelection}
-                  >
-                    {selectedCaseIds.size === filteredAndSortedCaseFiles.length ? (
-                      <>
-                        <CheckSquare className="h-4 w-4 mr-2" />
-                        Deselect All
-                      </>
-                    ) : (
-                      <>
-                        <Square className="h-4 w-4 mr-2" />
-                        Select All
-                      </>
-                    )}
+                  <Button onClick={() => setCreateFolderDialogOpen(true)}>
+                    <FolderPlus className="h-4 w-4 mr-2" />
+                    New Folder
                   </Button>
                 </div>
-              )}
-              {filteredAndSortedCaseFiles.map((caseFile) => (
-                <Card
-                  key={caseFile.id}
-                  className={cn(
-                    "p-5 transition-all duration-150 cursor-pointer group relative",
-                    "hover:border-primary/50 hover:shadow-[0_0_15px_rgba(56,189,248,0.1)]",
-                    "flex flex-col h-[220px]",
-                    selectedCaseIds.has(caseFile.id) && "border-primary bg-primary/5"
-                  )}
-                  onClick={() => navigate(`/case/${caseFile.id}`)}
-                >
-                  {/* Checkbox */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleCaseSelection(caseFile.id);
-                    }}
-                    className="absolute top-3 left-3 z-10 p-1 rounded hover:bg-background/80 transition-colors"
-                  >
-                    {selectedCaseIds.has(caseFile.id) ? (
-                      <CheckSquare className="h-5 w-5 text-primary" />
-                    ) : (
-                      <Square className="h-5 w-5 text-muted-foreground opacity-0 group-hover:opacity-100" />
-                    )}
-                  </button>
 
-                  {/* File Icon Header */}
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="p-2 rounded-lg bg-primary/10 ml-8">
-                      <FolderOpen className="h-6 w-6 text-primary" />
-                    </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                        <button
-                          className={cn(
-                            "rounded-md p-1.5 transition-all duration-150",
-                            "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
-                            "opacity-0 group-hover:opacity-100 focus:opacity-100"
-                          )}
+                {/* Bulk Actions Toolbar */}
+                {selectedCaseIds.size > 0 && (
+                  <Card className="p-3 border-primary/50 bg-primary/5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSelectedCaseIds(new Set())}
                         >
-                          <MoreVertical className="h-4 w-4" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-52 bg-popover z-50">
-                        <DropdownMenuItem
-                          onClick={(e) => handleRename(caseFile.id, caseFile.caseNumber, e)}
-                          className="cursor-pointer"
-                        >
-                          <Edit2 className="h-4 w-4 mr-2" />
-                          Rename
-                        </DropdownMenuItem>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <div className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground">
-                              <MoveRight className="h-4 w-4 mr-2" />
-                              Move to Folder
-                            </div>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent side="right" className="bg-popover z-50">
-                            <DropdownMenuItem
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleMoveToFolder(caseFile.id, undefined);
-                              }}
-                              className="cursor-pointer"
-                            >
-                              Uncategorized
-                            </DropdownMenuItem>
-                            {folders.map((folder) => (
-                              <DropdownMenuItem
-                                key={folder.id}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleMoveToFolder(caseFile.id, folder.id);
-                                }}
-                                className="cursor-pointer"
-                              >
-                                <Folder className="h-4 w-4 mr-2" />
-                                {folder.name}
-                              </DropdownMenuItem>
-                            ))}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <div className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground">
-                              <Download className="h-4 w-4 mr-2" />
-                              Export As
-                            </div>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent side="right" className="bg-popover z-50">
-                            <DropdownMenuItem
-                              onClick={(e) => exportAsPDF(caseFile.id, e)}
-                              className="cursor-pointer"
-                            >
-                              <FileText className="h-4 w-4 mr-2" />
-                              PDF Document
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={(e) => exportAsJSON(caseFile.id, e)}
-                              className="cursor-pointer"
-                            >
-                              <FileJson className="h-4 w-4 mr-2" />
-                              JSON File
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                        <DropdownMenuItem
-                          onClick={(e) => handleDelete(caseFile.id, e)}
-                          className="cursor-pointer text-destructive focus:text-destructive"
+                          <X className="h-4 w-4" />
+                        </Button>
+                        <span className="text-sm font-medium text-foreground">
+                          {selectedCaseIds.size} selected
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={handleBulkDeleteCases}
                         >
                           <Trash2 className="h-4 w-4 mr-2" />
                           Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-
-                  {/* File Content */}
-                  <div className="flex-1 flex flex-col">
-                    <h3 className="text-base font-semibold text-foreground mb-2 line-clamp-2">
-                      {caseFile.caseNumber}
-                    </h3>
-                    <p className="text-xs text-muted-foreground mb-3 line-clamp-2 flex-1">
-                      {caseFile.subject}
-                    </p>
-                    
-                    {/* File Footer */}
-                    <div className="space-y-2 pt-2 border-t border-border/50">
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Calendar className="h-3 w-3" />
-                        <span>{formatDate(caseFile.timestamp)}</span>
+                        </Button>
                       </div>
-                      {caseFile.messages.some(m => m.isReport || m.isRussellCherryReport) && (
-                        <Badge variant="outline" className="text-xs w-fit">
-                          Report Generated
-                        </Badge>
-                      )}
                     </div>
-                  </div>
+                  </Card>
+                )}
+
+                {/* Folder Tabs */}
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                  <Button
+                    variant={selectedFolder === "all" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setSelectedFolder("all")}
+                  >
+                    All ({caseFiles.filter(f => !f.projectId).length})
+                  </Button>
+                  <Button
+                    variant={selectedFolder === "uncategorized" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setSelectedFolder("uncategorized")}
+                  >
+                    Uncategorized ({getCaseCountForFolder("uncategorized")})
+                  </Button>
+                  {folders.map((folder) => (
+                    <div key={folder.id} className="relative group">
+                      <Button
+                        variant={selectedFolder === folder.id ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setSelectedFolder(folder.id)}
+                        className="pr-8"
+                      >
+                        <Folder className="h-3 w-3 mr-2" />
+                        {folder.name} ({getCaseCountForFolder(folder.id)})
+                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <MoreVertical className="h-3 w-3" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="bg-popover z-50">
+                          <DropdownMenuItem
+                            onClick={() => handleRenameFolder(folder.id, folder.name)}
+                            className="cursor-pointer"
+                          >
+                            <Edit2 className="h-4 w-4 mr-2" />
+                            Rename
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleDeleteFolder(folder.id)}
+                            className="cursor-pointer text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Case Files Grid */}
+              {caseFiles.length === 0 ? (
+                <Card className="p-12 text-center">
+                  <FolderOpen className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-foreground mb-2">No case files yet</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Start an investigation from the home page to create your first case file.
+                  </p>
                 </Card>
-              ))}
-            </div>
-          )}
+              ) : filteredAndSortedCaseFiles.length === 0 ? (
+                <Card className="p-12 text-center">
+                  <Search className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-foreground mb-2">No matching case files</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Try adjusting your search or filter criteria.
+                  </p>
+                </Card>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {/* Select All Button */}
+                  {filteredAndSortedCaseFiles.length > 0 && (
+                    <div className="col-span-full mb-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={toggleAllCasesSelection}
+                      >
+                        {selectedCaseIds.size === filteredAndSortedCaseFiles.length ? (
+                          <>
+                            <CheckSquare className="h-4 w-4 mr-2" />
+                            Deselect All
+                          </>
+                        ) : (
+                          <>
+                            <Square className="h-4 w-4 mr-2" />
+                            Select All
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                  {filteredAndSortedCaseFiles.map((caseFile) => (
+                    <Card
+                      key={caseFile.id}
+                      className={cn(
+                        "p-5 transition-all duration-150 cursor-pointer group relative",
+                        "hover:border-primary/50 hover:shadow-[0_0_15px_rgba(56,189,248,0.1)]",
+                        "flex flex-col h-[220px]",
+                        selectedCaseIds.has(caseFile.id) && "border-primary bg-primary/5"
+                      )}
+                      onClick={() => navigate(`/case/${caseFile.id}`)}
+                    >
+                      {/* Checkbox */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleCaseSelection(caseFile.id);
+                        }}
+                        className="absolute top-3 left-3 z-10 p-1 rounded hover:bg-background/80 transition-colors"
+                      >
+                        {selectedCaseIds.has(caseFile.id) ? (
+                          <CheckSquare className="h-5 w-5 text-primary" />
+                        ) : (
+                          <Square className="h-5 w-5 text-muted-foreground opacity-0 group-hover:opacity-100" />
+                        )}
+                      </button>
+
+                      {/* File Icon Header */}
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="p-2 rounded-lg bg-primary/10 ml-8">
+                          <FolderOpen className="h-6 w-6 text-primary" />
+                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                            <button
+                              className={cn(
+                                "rounded-md p-1.5 transition-all duration-150",
+                                "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
+                                "opacity-0 group-hover:opacity-100 focus:opacity-100"
+                              )}
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-52 bg-popover z-50">
+                            <DropdownMenuItem
+                              onClick={(e) => handleRename(caseFile.id, caseFile.caseNumber, e)}
+                              className="cursor-pointer"
+                            >
+                              <Edit2 className="h-4 w-4 mr-2" />
+                              Rename
+                            </DropdownMenuItem>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <div className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground">
+                                  <MoveRight className="h-4 w-4 mr-2" />
+                                  Move to Folder
+                                </div>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent side="right" className="bg-popover z-50">
+                                <DropdownMenuItem
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleMoveToFolder(caseFile.id, undefined);
+                                  }}
+                                  className="cursor-pointer"
+                                >
+                                  Uncategorized
+                                </DropdownMenuItem>
+                                {folders.map((folder) => (
+                                  <DropdownMenuItem
+                                    key={folder.id}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleMoveToFolder(caseFile.id, folder.id);
+                                    }}
+                                    className="cursor-pointer"
+                                  >
+                                    <Folder className="h-4 w-4 mr-2" />
+                                    {folder.name}
+                                  </DropdownMenuItem>
+                                ))}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <div className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground">
+                                  <Download className="h-4 w-4 mr-2" />
+                                  Export As
+                                </div>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent side="right" className="bg-popover z-50">
+                                <DropdownMenuItem
+                                  onClick={(e) => exportAsPDF(caseFile.id, e)}
+                                  className="cursor-pointer"
+                                >
+                                  <FileText className="h-4 w-4 mr-2" />
+                                  PDF Document
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={(e) => exportAsJSON(caseFile.id, e)}
+                                  className="cursor-pointer"
+                                >
+                                  <FileJson className="h-4 w-4 mr-2" />
+                                  JSON File
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                            <DropdownMenuItem
+                              onClick={(e) => handleDelete(caseFile.id, e)}
+                              className="cursor-pointer text-destructive focus:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+
+                      {/* File Content */}
+                      <div className="flex-1 flex flex-col">
+                        <h3 className="text-base font-semibold text-foreground mb-2 line-clamp-2">
+                          {caseFile.caseNumber}
+                        </h3>
+                        <p className="text-xs text-muted-foreground mb-3 line-clamp-2 flex-1">
+                          {caseFile.subject}
+                        </p>
+
+                        {/* File Footer */}
+                        <div className="space-y-2 pt-2 border-t border-border/50">
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Calendar className="h-3 w-3" />
+                            <span>{formatDate(caseFile.timestamp)}</span>
+                          </div>
+                          {caseFile.messages.some(m => m.isReport || m.isRussellCherryReport) && (
+                            <Badge variant="outline" className="text-xs w-fit">
+                              Report Generated
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="projects" className="space-y-6">

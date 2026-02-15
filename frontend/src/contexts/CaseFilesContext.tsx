@@ -1,4 +1,6 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from "react";
+import * as caseFilesApi from "@/services/caseFilesApi";
+import { useAuth } from "@/contexts/AuthContext";
 
 export interface CaseFile {
   id: string;
@@ -75,6 +77,9 @@ interface CaseFilesContextType {
 const CaseFilesContext = createContext<CaseFilesContextType | undefined>(undefined);
 
 export const CaseFilesProvider = ({ children }: { children: ReactNode }) => {
+  const { user, session, loading: authLoading } = useAuth();
+  const backendSynced = useRef(false);
+
   const [caseFiles, setCaseFiles] = useState<CaseFile[]>(() => {
     const stored = localStorage.getItem("sidney-case-files");
     return stored ? JSON.parse(stored) : [];
@@ -147,20 +152,71 @@ export const CaseFilesProvider = ({ children }: { children: ReactNode }) => {
     return defaultProjects;
   });
 
+  // Backend sync disabled: use local state only (no GET /api/case-files, /api/folders, /api/projects)
   useEffect(() => {
-    localStorage.setItem("sidney-case-files", JSON.stringify(caseFiles));
+    if (authLoading || !user || !session?.access_token) return;
+    const token = session.access_token;
+    localStorage.setItem("access_token", token);
+    if (session.refresh_token) {
+      localStorage.setItem("refresh_token", session.refresh_token);
+    }
+    // Skip backend fetch; data stays in localStorage / initial state. Set USE_CASE_FILES_BACKEND = true to re-enable.
+    const USE_CASE_FILES_BACKEND = false;
+    if (!USE_CASE_FILES_BACKEND) return;
+    let cancelled = false;
+    Promise.all([
+      caseFilesApi.fetchCaseFiles(token),
+      caseFilesApi.fetchFolders(token),
+      caseFilesApi.fetchProjects(token),
+    ])
+      .then(([files, folderList, projectList]) => {
+        if (!cancelled) {
+          setCaseFiles(files);
+          setFolders(folderList);
+          setProjects(projectList);
+          backendSynced.current = true;
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, user, session?.access_token]);
+
+  useEffect(() => {
+    if (!backendSynced.current) {
+      localStorage.setItem("sidney-case-files", JSON.stringify(caseFiles));
+    }
   }, [caseFiles]);
 
   useEffect(() => {
-    localStorage.setItem("sidney-folders", JSON.stringify(folders));
+    if (!backendSynced.current) {
+      localStorage.setItem("sidney-folders", JSON.stringify(folders));
+    }
   }, [folders]);
 
   useEffect(() => {
-    localStorage.setItem("sidney-projects", JSON.stringify(projects));
+    if (!backendSynced.current) {
+      localStorage.setItem("sidney-projects", JSON.stringify(projects));
+    }
   }, [projects]);
 
   const addCaseFile = (caseFile: CaseFile) => {
-    setCaseFiles(prev => [caseFile, ...prev]);
+    if (backendSynced.current) {
+      caseFilesApi
+        .createCaseFile({
+          caseNumber: caseFile.caseNumber,
+          subject: caseFile.subject,
+          folderId: caseFile.folderId,
+          category: caseFile.category,
+          projectId: caseFile.projectId,
+          messages: caseFile.messages,
+        })
+        .then((created) => setCaseFiles((prev) => [created, ...prev]))
+        .catch(() => setCaseFiles((prev) => [caseFile, ...prev]));
+    } else {
+      setCaseFiles((prev) => [caseFile, ...prev]);
+    }
   };
 
   const getCaseFile = (id: string) => {
@@ -178,86 +234,123 @@ export const CaseFilesProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const deleteCaseFile = (id: string) => {
-    setCaseFiles(prev => prev.filter(file => file.id !== id));
+    if (backendSynced.current) {
+      caseFilesApi.deleteCaseFile(id).catch(() => {});
+    }
+    setCaseFiles((prev) => prev.filter((file) => file.id !== id));
   };
 
   const renameCaseFile = (id: string, newName: string) => {
-    setCaseFiles(prev => prev.map(file => 
-      file.id === id ? { ...file, caseNumber: newName } : file
-    ));
+    if (backendSynced.current) {
+      caseFilesApi.updateCaseFile(id, { caseNumber: newName }).catch(() => {});
+    }
+    setCaseFiles((prev) =>
+      prev.map((file) => (file.id === id ? { ...file, caseNumber: newName } : file))
+    );
   };
 
   const moveCaseToFolder = (caseId: string, folderId: string | undefined) => {
-    setCaseFiles(prev => prev.map(file =>
-      file.id === caseId ? { ...file, folderId } : file
-    ));
+    if (backendSynced.current) {
+      caseFilesApi.updateCaseFile(caseId, { folderId: folderId ?? undefined }).catch(() => {});
+    }
+    setCaseFiles((prev) =>
+      prev.map((file) => (file.id === caseId ? { ...file, folderId } : file))
+    );
   };
 
   const createFolder = (name: string) => {
-    const newFolder: Folder = {
-      id: Date.now().toString(),
-      name,
-      timestamp: Date.now(),
-    };
-    setFolders(prev => [newFolder, ...prev]);
+    if (backendSynced.current) {
+      caseFilesApi.createFolder(name).then((f) => setFolders((prev) => [f, ...prev])).catch(() => {});
+    } else {
+      const newFolder: Folder = {
+        id: Date.now().toString(),
+        name,
+        timestamp: Date.now(),
+      };
+      setFolders((prev) => [newFolder, ...prev]);
+    }
   };
 
   const deleteFolder = (id: string) => {
-    // Move all cases in this folder to uncategorized
-    setCaseFiles(prev => prev.map(file =>
-      file.folderId === id ? { ...file, folderId: undefined } : file
-    ));
-    setFolders(prev => prev.filter(folder => folder.id !== id));
+    if (backendSynced.current) {
+      caseFilesApi.deleteFolder(id).catch(() => {});
+    }
+    setCaseFiles((prev) =>
+      prev.map((file) => (file.folderId === id ? { ...file, folderId: undefined } : file))
+    );
+    setFolders((prev) => prev.filter((folder) => folder.id !== id));
   };
 
   const renameFolder = (id: string, newName: string) => {
-    setFolders(prev => prev.map(folder =>
-      folder.id === id ? { ...folder, name: newName } : folder
-    ));
+    if (backendSynced.current) {
+      caseFilesApi.updateFolder(id, { name: newName }).catch(() => {});
+    }
+    setFolders((prev) =>
+      prev.map((folder) => (folder.id === id ? { ...folder, name: newName } : folder))
+    );
   };
 
-  // Project management functions
   const createProject = (name: string, description?: string) => {
-    const newProject: Project = {
-      id: Date.now().toString(),
-      name,
-      description,
-      timestamp: Date.now(),
-      documents: [],
-      reports: [],
-      chatHistory: []
-    };
-    setProjects(prev => [newProject, ...prev]);
+    if (backendSynced.current) {
+      caseFilesApi
+        .createProject(name, description)
+        .then((p) => setProjects((prev) => [p, ...prev]))
+        .catch(() => {});
+    } else {
+      const newProject: Project = {
+        id: Date.now().toString(),
+        name,
+        description,
+        timestamp: Date.now(),
+        documents: [],
+        reports: [],
+        chatHistory: [],
+      };
+      setProjects((prev) => [newProject, ...prev]);
+    }
   };
 
   const getProject = (id: string) => {
-    return projects.find(project => project.id === id);
+    return projects.find((project) => project.id === id);
   };
 
   const deleteProject = (id: string) => {
-    setProjects(prev => prev.filter(project => project.id !== id));
+    if (backendSynced.current) {
+      caseFilesApi.deleteProject(id).catch(() => {});
+    }
+    setProjects((prev) => prev.filter((project) => project.id !== id));
   };
 
   const updateProject = (id: string, updates: Partial<Project>) => {
-    setProjects(prev => prev.map(project =>
-      project.id === id ? { ...project, ...updates } : project
-    ));
+    if (backendSynced.current && (updates.name != null || updates.description != null)) {
+      caseFilesApi.updateProject(id, { name: updates.name, description: updates.description }).catch(() => {});
+    }
+    setProjects((prev) =>
+      prev.map((project) => (project.id === id ? { ...project, ...updates } : project))
+    );
   };
 
   const addDocumentToProject = (projectId: string, document: ProjectDocument) => {
-    setProjects(prev => prev.map(project =>
-      project.id === projectId 
-        ? { ...project, documents: [document, ...project.documents] }
-        : project
-    ));
+    setProjects((prev) =>
+      prev.map((project) =>
+        project.id === projectId
+          ? { ...project, documents: [document, ...project.documents] }
+          : project
+      )
+    );
   };
 
   const removeDocumentFromProject = (projectId: string, documentId: string) => {
-    setProjects(prev => prev.map(project =>
-      project.id === projectId
-        ? { ...project, documents: project.documents.filter(doc => doc.id !== documentId) }
-        : project
-    ));
+    if (backendSynced.current) {
+      caseFilesApi.removeProjectDocument(projectId, documentId).catch(() => {});
+    }
+    setProjects((prev) =>
+      prev.map((project) =>
+        project.id === projectId
+          ? { ...project, documents: project.documents.filter((doc) => doc.id !== documentId) }
+          : project
+      )
+    );
   };
 
   const addReportToProject = (projectId: string, report: CaseFile) => {
