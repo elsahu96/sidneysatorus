@@ -1,0 +1,18 @@
+# Used when submitting from repo root for Cloud Build
+.git
+.gitignore
+node_modules
+**/node_modules
+**/__pycache__
+**/.env
+**/.venv
+**/venv
+*.pyc
+.pytest_cache
+.coverage
+htmlcov
+*.md
+!deploy/*.md
+frontend/dist
+*.log
+.DS_Store

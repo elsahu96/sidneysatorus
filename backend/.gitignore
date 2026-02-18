@@ -4,3 +4,5 @@ node_modules
 
 # Google Application Default Credentials (contains secrets — do not commit)
 application_default_credentials.json
+__pycache__/
+*.pyc

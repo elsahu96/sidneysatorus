@@ -1,0 +1,45 @@
+# Build and deploy frontend to Cloud Run.
+# Set backend URL when submitting (required for VITE_API_URL at build time):
+#   gcloud builds submit --config deploy/cloudbuild-frontend.yaml \
+#     --substitutions=_BACKEND_URL=https://backend-xxx.run.app .
+
+substitutions:
+  _REGION: us-central1
+  _SERVICE: frontend
+  _BACKEND_URL: https://localhost
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg
+      - VITE_API_URL=${_BACKEND_URL}
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_SERVICE}:${SHORT_SHA}
+      - -f
+      - frontend/Dockerfile
+      - frontend
+
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_SERVICE}:${SHORT_SHA}
+    waitFor: ["-"]
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_SERVICE}:${SHORT_SHA}
+      - --region
+      - ${_REGION}
+      - --platform
+      - managed
+      - --allow-unauthenticated
+    waitFor: ["-"]
+
+images:
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_SERVICE}:${SHORT_SHA}

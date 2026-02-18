@@ -1,7 +1,7 @@
 # Use Python 3.12 as the base image to avoid Pydantic/spaCy compatibility issues with Python 3.14
 FROM python:3.12-slim
 
-# Set environment variables
+# Set environment variables (PORT is used by run.py for the server port)
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8080
@@ -30,8 +30,8 @@ COPY . .
 # Generate Prisma client (if needed)
 RUN prisma generate --schema=prisma/schema.prisma
 
-# Expose the port the app runs on
-EXPOSE 8080
+# Expose the port the app runs on (default 8080; override at run time with -e PORT=3000)
+EXPOSE ${PORT}
 
 # Command to run the application
 # Using run.py as the entry point based on the project structure
