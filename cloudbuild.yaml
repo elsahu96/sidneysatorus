@@ -1,0 +1,39 @@
+# Root Cloud Build config (auto-detected by triggers).
+# Uses backend/Dockerfile and frontend/Dockerfile; no root Dockerfile.
+#
+# For full deploy with Cloud Run, use:
+#   gcloud builds submit --config deploy/cloudbuild-backend.yaml .
+#   gcloud builds submit --config deploy/cloudbuild-frontend.yaml --substitutions=_BACKEND_URL=https://backend-xxx.run.app .
+
+substitutions:
+  _REGION: europe-central2	
+  _BACKEND_URL: http://localhost:8080
+
+steps:
+  # Build backend from backend/Dockerfile
+  - name: gcr.io/cloud-builders/docker
+    id: build-backend
+    args:
+      - build
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/backend:${SHORT_SHA}
+      - -f
+      - backend/Dockerfile
+      - backend
+
+  # Build frontend from frontend/Dockerfile (set _BACKEND_URL in trigger for production)
+  - name: gcr.io/cloud-builders/docker
+    id: build-frontend
+    args:
+      - build
+      - --build-arg
+      - VITE_API_URL=${_BACKEND_URL}
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/frontend:${SHORT_SHA}
+      - -f
+      - frontend/Dockerfile
+      - frontend
+
+images:
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/backend:${SHORT_SHA}
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/frontend:${SHORT_SHA}
