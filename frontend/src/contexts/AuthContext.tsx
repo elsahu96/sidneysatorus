@@ -58,18 +58,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [syncSessionToStorage]);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+    } catch (err) {
+      if (err instanceof TypeError && err.message === "Failed to fetch") {
+        throw new Error(
+          "Cannot reach auth service. Check your connection and that VITE_SUPABASE_URL and Supabase key are set in .env."
+        );
+      }
+      throw err;
+    }
   }, []);
 
   const signUp = useCallback(
     async (email: string, password: string, name?: string) => {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: name ? { data: { name } } : undefined,
-      });
-      if (error) throw error;
+      try {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: name ? { data: { name } } : undefined,
+        });
+        if (error) throw error;
+      } catch (err) {
+        if (err instanceof TypeError && err.message === "Failed to fetch") {
+          throw new Error(
+            "Cannot reach auth service. Check your connection and that VITE_SUPABASE_URL and Supabase key are set in .env."
+          );
+        }
+        throw err;
+      }
     },
     []
   );

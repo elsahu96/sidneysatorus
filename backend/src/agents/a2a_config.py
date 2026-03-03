@@ -79,14 +79,14 @@ def create_reporter_agent_card(base_url: str = "http://localhost:8003") -> Agent
     return AgentCard(
         name="reporter_agent",
         url=base_url,
-        description="Synthesizes intelligence reports from search results and file uploads, outputting HTML and PDF formats.",
+        description="Synthesises intelligence reports from search results and file uploads, outputting HTML and PDF formats.",
         version="1.0.0",
         capabilities={},
         skills=[
             AgentSkill(
                 id="reporter_agent",
                 name="report_generation",
-                description="Synthesizes comprehensive intelligence reports and generates HTML and PDF outputs. Requires research_context and search_results inputs.",
+                description="Synthesises comprehensive intelligence reports and generates HTML and PDF outputs. Requires research_context and search_results inputs.",
                 tags=["custom", "reporting", "pdf", "html"]
             )
         ],

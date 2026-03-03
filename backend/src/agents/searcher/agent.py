@@ -4,22 +4,22 @@ to gather external data.
 """
 
 import os
-from google.adk.agents.llm_agent import LlmAgent
-from google.adk.grounding.google_search_grounding import GoogleSearchGrounding
+from google.adk.agents.llm_agent import Agent
+from google.adk.tools import google_search
 from dotenv import load_dotenv
 
 load_dotenv()
 
-MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.0-flash")          
 
 
-def create_searcher_agent() -> LlmAgent:
+def create_searcher_agent() -> Agent:
     """
     Creates an LlmAgent that uses GoogleSearchTool to gather external intelligence.
     
     The agent:
     1. Reads search queries from session.state['research_context']['search_queries']
-    2. Executes searches using GoogleSearchGrounding
+    2. Executes searches using the Google Search tool
     3. Synthesizes search results into structured intelligence data
     
     Output is stored in session.state['search_results'] with structure:
@@ -88,7 +88,7 @@ You MUST respond with ONLY valid JSON in this exact structure:
 
 **Guidelines:**
 - Execute searches for ALL queries provided in the research context
-- Prioritize recent, credible sources (news sites, official records, reputable databases)
+- Prioritise recent, credible sources (news sites, official records, reputable databases)
 - Extract specific facts, dates, names, and relationships
 - Note any contradictions or gaps in information
 - Cite sources properly with URLs
@@ -107,14 +107,11 @@ You should execute both searches, gather results, and synthesize them into struc
 
 Remember: Respond ONLY with valid JSON. No markdown, no explanations, no code fences."""
 
-    # Create Google Search Grounding tool
-    google_search = GoogleSearchGrounding()
-    
-    return LlmAgent(
+    return Agent(
         name="searcher_agent",
         model=MODEL_NAME,
         instruction=instruction,
-        description="Uses GoogleSearchTool to gather external intelligence data and synthesize search results.",
+        description="Uses Google Search tool to gather external intelligence data and synthesize search results.",
         output_key="search_results",  # Stores output in session.state['search_results']
-        grounding=google_search  # Enables Google Search tool
+        tools=[google_search],
     )

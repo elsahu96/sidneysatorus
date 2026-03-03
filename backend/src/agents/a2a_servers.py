@@ -2,7 +2,6 @@
 A2A Server Setup: Expose agents via A2A protocol using to_a2a() function.
 """
 
-import os
 from google.adk.a2a.utils.agent_to_a2a import to_a2a
 from .analyzer import create_analyzer_agent
 from .searcher import create_searcher_agent

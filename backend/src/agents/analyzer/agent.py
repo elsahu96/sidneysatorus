@@ -1,28 +1,27 @@
 """
-Analyzer Agent: LlmAgent that parses user queries, extracts entities, 
+Analyzer Agent: LlmAgent that parses user queries, extracts entities,
 and generates 3-5 specific search queries.
 """
 
 import os
 import json
-from typing import List, Dict, Any
-from google.adk.agents.llm_agent import LlmAgent
+from google.adk.agents.llm_agent import LLMAgent
 from dotenv import load_dotenv
 
 load_dotenv()
 
-MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.0-flash")
 
 
-def create_analyzer_agent() -> LlmAgent:
+def create_analyzer_agent() -> LLMAgent:
     """
     Creates an LlmAgent that analyzes user queries and generates search queries.
-    
+
     The agent:
     1. Parses the user query to understand intent
     2. Extracts key entities (people, companies, locations, events)
     3. Generates 3-5 specific, focused search queries
-    
+
     Output is stored in session.state['research_context'] with structure:
     {
         "query_understanding": "...",
@@ -30,14 +29,14 @@ def create_analyzer_agent() -> LlmAgent:
         "search_queries": ["query1", "query2", ...]
     }
     """
-    
-    instruction = """You are an intelligence analysis agent specialized in parsing complex queries and generating focused search strategies.
+
+    instruction = """You are an intelligence analyser agent specialized in parsing complex queries and generating focused search strategies.
 
 Your task is to:
 1. **Parse the user query** to understand the core intent, scope, and context
 2. **Extract key entities** including:
    - People (names, aliases, roles)
-   - Organizations (companies, institutions, groups)
+   - Organisations (companies, institutions, groups)
    - Locations (countries, cities, regions)
    - Events (dates, incidents, activities)
    - Other relevant entities (vessels, transactions, relationships)
@@ -50,10 +49,9 @@ You MUST respond with ONLY valid JSON in this exact structure:
   "query_understanding": "A clear, concise summary of what the user is asking for, including scope, time frame, and key focus areas.",
   "entities": [
     {
-      "type": "PERSON | ORGANIZATION | LOCATION | EVENT | OTHER",
+      "type": "PERSON | ORGANISATION | LOCATION | EVENT | OTHER",
       "name": "Full name or identifier",
-      "aliases": ["alternative names", "nicknames"],
-      "context": "Why this entity is relevant to the query"
+      "aliases": ["alternative names", "nicknames"]
     }
   ],
   "search_queries": [
@@ -104,10 +102,10 @@ Output:
 
 Remember: Respond ONLY with valid JSON. No markdown, no explanations, no code fences."""
 
-    return LlmAgent(
-        name="analyzer_agent",
+    return LLMAgent(
+        name="analyser_agent",
         model=MODEL_NAME,
         instruction=instruction,
         description="Parses user queries, extracts entities, and generates 3-5 specific search queries for intelligence gathering.",
-        output_key="research_context"  # Stores output in session.state['research_context']
+        output_key="research_context",  # Stores output in session.state['research_context']
     )

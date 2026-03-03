@@ -40,7 +40,9 @@ def _jwt_header_unverified(token: str) -> dict:
         raw = base64.urlsafe_b64decode(part)
         return json.loads(raw)
     except Exception:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token format")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token format"
+        )
 
 
 def _get_jwks(url: str) -> dict:
@@ -70,17 +72,23 @@ def _verify_with_jwks(token: str, supabase_url: str) -> dict:
     header = _jwt_header_unverified(token)
     kid = header.get("kid")
     if not kid:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token missing kid")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Token missing kid"
+        )
     keys_data = _get_jwks(supabase_url)
     keys = keys_data.get("keys") or []
     key_dict = next((k for k in keys if k.get("kid") == kid), None)
     if not key_dict:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Key not found in JWKS")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Key not found in JWKS"
+        )
     try:
         jwk_key = jwk.JWK.from_json(json.dumps(key_dict))
         public_pem = jwk_key.export_to_pem()
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"JWK error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"JWK error: {e}"
+        )
     alg = header.get("alg", "RS256")
     algorithms = ["RS256", "ES256", "EdDSA"]
     try:
@@ -98,8 +106,12 @@ def _verify_with_jwks(token: str, supabase_url: str) -> dict:
         ) from e
     except Exception as e:
         if type(e).__name__ == "ExpiredSignatureError":
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired"
+            )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        )
 
 
 def verify_supabase_token(token: str) -> dict:
@@ -121,8 +133,12 @@ def verify_supabase_token(token: str) -> dict:
             ) from e
         except Exception as e:
             if type(e).__name__ == "ExpiredSignatureError":
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired"
+                )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+            )
     if url:
         return _verify_with_jwks(token, url)
     raise HTTPException(
@@ -197,7 +213,9 @@ async def get_current_user_and_team(request: Request, db: Prisma) -> tuple[str, 
     sub = payload.get("sub")
     email = payload.get("email") or payload.get("email_address") or ""
     if not sub or not email:
-        logger.info("Auth 401: token missing sub or email (sub=%s, email=%s)", sub, email)
+        logger.info(
+            "Auth 401: token missing sub or email (sub=%s, email=%s)", sub, email
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token missing sub or email",

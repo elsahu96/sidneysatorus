@@ -13,19 +13,28 @@ const Login = () => {
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { user, signIn, signUp } = useAuth();
   const navigate = useNavigate();
+  const { user, loading: authLoading, signIn, signUp } = useAuth();
 
   useEffect(() => {
     if (user) navigate("/", { replace: true });
   }, [user, navigate]);
 
-  const messageFromError = (err: unknown, fallback: string): string => {
+  const messageFromError = (err: unknown): string => {
     const msg = err instanceof Error ? err.message : String(err);
-    if (/email rate limit|rate limit exceeded|too many requests|429/i.test(msg)) {
-      return "Too many sign-up attempts. Please try again in about an hour, or sign in if you already have an account. To remove this limit, use custom SMTP in Supabase (Project Settings → Auth → SMTP).";
+    if (/too-many-requests|quota-exceeded/i.test(msg)) {
+      return "Too many attempts. Please try again later.";
     }
-    return fallback;
+    if (/user-not-found|wrong-password|invalid-credential|invalid login credentials/i.test(msg)) {
+      return "Invalid email or password.";
+    }
+    if (/email-already-in-use/i.test(msg)) {
+      return "An account with this email already exists.";
+    }
+    if (/failed to fetch|cannot reach auth|network/i.test(msg) || err instanceof TypeError) {
+      return "Cannot reach auth service. Check your connection and that Supabase is configured (VITE_SUPABASE_URL and key in .env).";
+    }
+    return msg;
   };
 
   const handleSignIn = async (e: React.FormEvent) => {
@@ -34,9 +43,9 @@ const Login = () => {
     setLoading(true);
     try {
       await signIn(email, password);
-      navigate("/", { replace: true });
+      // useEffect will redirect when user is set
     } catch (err: unknown) {
-      setError(messageFromError(err, err instanceof Error ? err.message : "Sign in failed"));
+      setError(messageFromError(err));
     } finally {
       setLoading(false);
     }
@@ -48,13 +57,23 @@ const Login = () => {
     setLoading(true);
     try {
       await signUp(email, password, name || undefined);
-      navigate("/", { replace: true });
+      // useEffect will redirect when user is set
     } catch (err: unknown) {
-      setError(messageFromError(err, err instanceof Error ? err.message : "Sign up failed"));
+      setError(messageFromError(err));
     } finally {
       setLoading(false);
     }
   };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <p className="text-muted-foreground">Loading…</p>
+      </div>
+    );
+  }
+
+  if (user) return null; // redirect in progress
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">

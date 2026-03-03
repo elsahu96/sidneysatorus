@@ -81,7 +81,7 @@ class OSINTInvestigatorService:
     def __init__(self, use_multi_agent: bool = True):
         """
         Initialize the OSINT Investigator with Gemini API
-        
+
         Args:
             use_multi_agent: If True, use the multi-agent workflow (Analyzer → Searcher → Reporter).
                             If False, use the legacy single-agent approach.
@@ -94,7 +94,7 @@ class OSINTInvestigatorService:
 
         # Load the system prompt
         self.system_prompt = self._load_system_prompt()
-        
+
         # Initialize multi-agent coordinator if enabled
         self.use_multi_agent = use_multi_agent and ADK_AVAILABLE
         if self.use_multi_agent and create_coordinator_agent is not None:
@@ -107,20 +107,20 @@ class OSINTInvestigatorService:
                     self.runner = InMemoryRunner(
                         agent=self.coordinator_agent,
                         app_name="osint_investigator",
-                        session_service=self.session_service
+                        session_service=self.session_service,
                     )
                 except TypeError:
                     # Fallback: try without session_service parameter
                     try:
                         self.runner = InMemoryRunner(
-                            agent=self.coordinator_agent,
-                            app_name="osint_investigator"
+                            agent=self.coordinator_agent, app_name="osint_investigator"
                         )
                     except TypeError:
                         # Last fallback: try with just agent
                         self.runner = InMemoryRunner(agent=self.coordinator_agent)
             except Exception as e:
                 import traceback
+
                 print(f"Warning: Failed to initialize multi-agent workflow: {e}")
                 print(traceback.format_exc())
                 self.use_multi_agent = False
@@ -202,7 +202,10 @@ RULES:
 """
 
     async def investigation_report(
-        self, query: str, context: Optional[str] = None, file_uploads: Optional[List[Dict[str, Any]]] = None
+        self,
+        query: str,
+        context: Optional[str] = None,
+        file_uploads: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """
         Analyze a user query and generate an investigation report using multi-agent workflow.
@@ -220,26 +223,35 @@ RULES:
                 ]
 
         Returns:
-            Dict containing investigation report with formatted_report (markdown), 
+            Dict containing investigation report with formatted_report (markdown),
             geolocations, news_and_sources, and report artifacts (HTML/PDF paths)
         """
         # Use multi-agent workflow if enabled and properly initialized
-        if self.use_multi_agent and self.coordinator_agent is not None and self.runner is not None:
-            return await self._investigation_report_multi_agent(query, context, file_uploads)
+        if (
+            self.use_multi_agent
+            and self.coordinator_agent is not None
+            and self.runner is not None
+        ):
+            return await self._investigation_report_multi_agent(
+                query, context, file_uploads
+            )
         else:
             return await self._investigation_report_legacy(query, context)
-    
+
     async def _investigation_report_multi_agent(
-        self, query: str, context: Optional[str] = None, file_uploads: Optional[List[Dict[str, Any]]] = None
+        self,
+        query: str,
+        context: Optional[str] = None,
+        file_uploads: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """
         Generate investigation report using multi-agent workflow: Analyzer → Searcher → Reporter
-        
+
         Args:
             query: User's investigation query
             context: Optional additional context
             file_uploads: Optional list of uploaded files
-        
+
         Returns:
             Dict containing investigation report data
         """
@@ -250,34 +262,35 @@ RULES:
                 # Try async create_session
                 if asyncio.iscoroutinefunction(self.session_service.create_session):
                     session = await self.session_service.create_session(
-                        app_name="osint_investigator",
-                        user_id=user_id
+                        app_name="osint_investigator", user_id=user_id
                     )
                 else:
                     # Sync create_session
                     session = self.session_service.create_session(
-                        app_name="osint_investigator",
-                        user_id=user_id
+                        app_name="osint_investigator", user_id=user_id
                     )
             except TypeError:
                 # Try with different parameter names
                 try:
                     session = await self.session_service.create_session(
-                        app_name="osint_investigator",
-                        user_id=user_id
+                        app_name="osint_investigator", user_id=user_id
                     )
                 except Exception:
                     # Last fallback: create minimal session object
                     session = Mock()
                     session.id = f"session_{uuid.uuid4().hex[:8]}"
                     session.state = {}
-            
-            session_id = session.id if hasattr(session, 'id') else getattr(session, 'session_id', f"session_{uuid.uuid4().hex[:8]}")
-            
+
+            session_id = (
+                session.id
+                if hasattr(session, "id")
+                else getattr(session, "session_id", f"session_{uuid.uuid4().hex[:8]}")
+            )
+
             # Store file uploads in session state if provided
             if file_uploads:
                 # Ensure session.state exists and is a dict
-                if not hasattr(session, 'state'):
+                if not hasattr(session, "state"):
                     session.state = {}
                 elif not isinstance(session.state, dict):
                     # Convert to dict if it's not already
@@ -286,89 +299,97 @@ RULES:
                     except Exception:
                         session.state = {}
                 session.state["temp:file_uploads"] = file_uploads
-            
+
             # Add context to query if provided
             full_query = query
             if context:
                 full_query = f"{query}\n\nAdditional Context: {context}"
-            
+
             # Create user message - try different formats for compatibility
             try:
                 # Try with types.Content
                 user_message = types.Content(
-                    role="user",
-                    parts=[types.Part(text=full_query)]
+                    role="user", parts=[types.Part(text=full_query)]
                 )
             except Exception:
                 # Fallback: use string directly
                 user_message = full_query
-            
+
             # Run the coordinator agent workflow
             # This will execute: Analyzer → Searcher → Reporter
             events = []
             try:
                 # Try with new_message parameter
                 async for event in self.runner.run_async(
-                    user_id=user_id,
-                    session_id=session_id,
-                    new_message=user_message
+                    user_id=user_id, session_id=session_id, new_message=user_message
                 ):
                     events.append(event)
             except TypeError:
                 # Fallback: try with different parameter names
                 try:
                     async for event in self.runner.run_async(
-                        user_id=user_id,
-                        session_id=session_id,
-                        message=user_message
+                        user_id=user_id, session_id=session_id, message=user_message
                     ):
                         events.append(event)
                 except TypeError:
                     # Last fallback: try with just user_id and message
                     async for event in self.runner.run_async(
-                        user_id=user_id,
-                        session_id=session_id,
-                        content=full_query
+                        user_id=user_id, session_id=session_id, content=full_query
                     ):
                         events.append(event)
-            
+
             # Extract results from session state
             # Session state might be accessed differently - try multiple approaches
             state = {}
-            if hasattr(session, 'state'):
+            if hasattr(session, "state"):
                 if isinstance(session.state, dict):
                     state = session.state
-                elif hasattr(session.state, 'get'):
+                elif hasattr(session.state, "get"):
                     # It's a dict-like object
                     state = session.state
                 else:
                     # Try accessing as attribute or method
                     try:
-                        state = dict(session.state) if hasattr(session.state, '__iter__') else {}
+                        state = (
+                            dict(session.state)
+                            if hasattr(session.state, "__iter__")
+                            else {}
+                        )
                     except Exception:
                         state = {}
-            
+
             # If state is still empty, try to get it from session service
             if not state:
                 try:
-                    if hasattr(self.session_service, 'get_session_state'):
-                        retrieved_state = self.session_service.get_session_state(session_id)
+                    if hasattr(self.session_service, "get_session_state"):
+                        retrieved_state = self.session_service.get_session_state(
+                            session_id
+                        )
                         if retrieved_state:
-                            state = retrieved_state if isinstance(retrieved_state, dict) else {}
+                            state = (
+                                retrieved_state
+                                if isinstance(retrieved_state, dict)
+                                else {}
+                            )
                 except Exception:
                     pass
-            
-            research_context = state.get("research_context", {}) if isinstance(state, dict) else {}
-            search_results = state.get("search_results", {}) if isinstance(state, dict) else {}
-            report_data = state.get("report_data", {}) if isinstance(state, dict) else {}
-            
+
+            research_context = (
+                state.get("research_context", {}) if isinstance(state, dict) else {}
+            )
+            search_results = (
+                state.get("search_results", {}) if isinstance(state, dict) else {}
+            )
+            report_data = (
+                state.get("report_data", {}) if isinstance(state, dict) else {}
+            )
+
             # Build the response in the expected format
             result = {
-                "query_understanding": research_context.get("query_understanding", query),
-                "entity_analysis": {
-                    "primary_entities": [],
-                    "secondary_entities": []
-                },
+                "query_understanding": research_context.get(
+                    "query_understanding", query
+                ),
+                "entity_analysis": {"primary_entities": [], "secondary_entities": []},
                 "investigation_type": "COMPANY_INVESTIGATION",  # Default, can be extracted from research_context
                 "geolocations": [],
                 "news_and_sources": [],
@@ -376,10 +397,10 @@ RULES:
                 "report_artifacts": {
                     "html_content": report_data.get("html_content"),
                     "pdf_path": report_data.get("pdf_path"),
-                    "html_path": report_data.get("html_path")
-                }
+                    "html_path": report_data.get("html_path"),
+                },
             }
-            
+
             # Extract entities from research_context
             entities = research_context.get("entities", [])
             for entity in entities:
@@ -388,48 +409,53 @@ RULES:
                     "name": entity.get("name", ""),
                     "aliases": entity.get("aliases", []),
                     "context": entity.get("context", ""),
-                    "location": entity.get("location")
+                    "location": entity.get("location"),
                 }
-                
+
                 if entity_type == "PERSON" or entity_type == "ORGANIZATION":
                     result["entity_analysis"]["primary_entities"].append(entity_data)
                 else:
                     result["entity_analysis"]["secondary_entities"].append(entity_data)
-            
+
             # Extract geolocations (if available in research_context or search_results)
             # Note: The analyzer might not extract geolocations directly, so we'll need to
             # infer from entities or search results
             for entity in entities:
                 if entity.get("location"):
-                    result["geolocations"].append({
-                        "entity": entity.get("name", ""),
-                        "coordinates": [0.0, 0.0],  # Would need geocoding
-                        "context": entity.get("location")
-                    })
-            
+                    result["geolocations"].append(
+                        {
+                            "entity": entity.get("name", ""),
+                            "coordinates": [0.0, 0.0],  # Would need geocoding
+                            "context": entity.get("location"),
+                        }
+                    )
+
             # Extract sources from search_results
             results = search_results.get("results", [])
             for result_item in results:
                 sources = result_item.get("sources", [])
                 for source in sources:
-                    result["news_and_sources"].append({
-                        "title": source.get("title", ""),
-                        "url": source.get("url", ""),
-                        "date": source.get("date", "unknown"),
-                        "key_insight": source.get("key_insight", "")
-                    })
-            
+                    result["news_and_sources"].append(
+                        {
+                            "title": source.get("title", ""),
+                            "url": source.get("url", ""),
+                            "date": source.get("date", "unknown"),
+                            "key_insight": source.get("key_insight", ""),
+                        }
+                    )
+
             # Build markdown report from search results and research context
             markdown_report = self._build_markdown_from_agent_results(
                 research_context, search_results, report_data
             )
             result["formatted_report"] = markdown_report
-            
+
             return result
-            
+
         except Exception as e:
             # Fallback to legacy method on error
             import traceback
+
             error_msg = f"Multi-agent workflow error: {e}\n{traceback.format_exc()}"
             print(error_msg)
             # Try legacy method
@@ -439,29 +465,32 @@ RULES:
                 # If legacy also fails, return error response
                 return {
                     "query_understanding": query,
-                    "entity_analysis": {"primary_entities": [], "secondary_entities": []},
+                    "entity_analysis": {
+                        "primary_entities": [],
+                        "secondary_entities": [],
+                    },
                     "investigation_type": "ERROR",
                     "geolocations": [],
                     "news_and_sources": [],
                     "formatted_report": f"# Error\n\nFailed to generate report: {str(e)}",
                     "report_artifacts": {},
-                    "error": str(e)
+                    "error": str(e),
                 }
-    
+
     def _build_markdown_from_agent_results(
         self,
         research_context: Dict[str, Any],
         search_results: Dict[str, Any],
-        report_data: Dict[str, Any]
+        report_data: Dict[str, Any],
     ) -> str:
         """
         Build markdown report from multi-agent workflow results.
-        
+
         Args:
             research_context: Output from Analyzer agent
             search_results: Output from Searcher agent
             report_data: Output from Reporter agent
-        
+
         Returns:
             Markdown formatted report string
         """
@@ -469,13 +498,13 @@ RULES:
         entities = research_context.get("entities", [])
         synthesized_intelligence = search_results.get("synthesized_intelligence", "")
         results = search_results.get("results", [])
-        
+
         # Build markdown report
         markdown = f"# Intelligence Report\n\n## Executive Summary\n\n{query_understanding}\n\n"
-        
+
         if synthesized_intelligence:
             markdown += f"**Key Intelligence:**\n\n{synthesized_intelligence}\n\n"
-        
+
         # Key Entities
         if entities:
             markdown += "## Key Entities\n\n"
@@ -485,15 +514,17 @@ RULES:
                 context = entity.get("context", "")
                 markdown += f"- **{name}** ({entity_type}): {context}\n"
             markdown += "\n"
-        
+
         # Methodology
         markdown += "## Methodology\n\n"
-        markdown += "This report was generated through automated intelligence gathering:\n"
+        markdown += (
+            "This report was generated through automated intelligence gathering:\n"
+        )
         markdown += "1. Query analysis and entity extraction\n"
         markdown += "2. Web search execution across multiple queries\n"
         markdown += "3. Intelligence synthesis and cross-referencing\n"
         markdown += "4. Report generation and formatting\n\n"
-        
+
         # Findings
         if results:
             markdown += "## Findings\n\n"
@@ -501,13 +532,13 @@ RULES:
                 query = result_item.get("query", "")
                 findings = result_item.get("key_findings", "")
                 markdown += f"### {idx}. {query}\n\n{findings}\n\n"
-        
+
         # Sources
         sources_list = []
         for result_item in results:
             sources = result_item.get("sources", [])
             sources_list.extend(sources)
-        
+
         if sources_list:
             markdown += "## Sources\n\n"
             for idx, source in enumerate(sources_list, 1):
@@ -518,24 +549,26 @@ RULES:
                 markdown += f"{idx}. **{title}** ({date})\n"
                 markdown += f"   - URL: {url}\n"
                 markdown += f"   - Key Insight: {insight}\n\n"
-        
+
         # Conclusion
         markdown += "## Conclusion\n\n"
         markdown += f"Based on comprehensive intelligence gathering, this report analyzed {len(entities)} key entities. "
         markdown += "The findings indicate significant intelligence value for due diligence and compliance purposes.\n\n"
         markdown += "**Recommendations:**\n"
         markdown += "- Continue monitoring for updates on identified entities\n"
-        markdown += "- Verify findings through additional primary sources where possible\n"
+        markdown += (
+            "- Verify findings through additional primary sources where possible\n"
+        )
         markdown += "- Consider follow-up investigations on specific relationships or transactions identified\n"
-        
+
         return markdown
-    
+
     async def _investigation_report_legacy(
         self, query: str, context: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Legacy investigation report method using single Gemini call.
-        
+
         Args:
             query: User's investigation query
             context: Optional additional context
@@ -660,6 +693,7 @@ RULES:
         except Exception as e:
             # Handle API errors gracefully
             import traceback
+
             error_msg = f"Gemini API error: {e}\n{traceback.format_exc()}"
             print(error_msg)
             # Return a basic error response instead of crashing
@@ -670,11 +704,11 @@ RULES:
                 "geolocations": [],
                 "news_and_sources": [],
                 "formatted_report": f"# Error\n\nFailed to generate investigation report due to API error: {str(e)}\n\nPlease check your API key and try again.",
-                "error": str(e)
+                "error": str(e),
             }
 
         # Extract JSON from response
-        if not hasattr(response, 'text') or not response.text:
+        if not hasattr(response, "text") or not response.text:
             return {
                 "query_understanding": query,
                 "entity_analysis": {"primary_entities": [], "secondary_entities": []},
@@ -682,9 +716,9 @@ RULES:
                 "geolocations": [],
                 "news_and_sources": [],
                 "formatted_report": "# Error\n\nNo response received from Gemini API.",
-                "error": "Empty response from API"
+                "error": "Empty response from API",
             }
-        
+
         response_text = response.text.strip()
 
         # Remove markdown code blocks if present (handle multiple formats)
@@ -693,33 +727,33 @@ RULES:
             response_text = response_text[7:].strip()
         elif response_text.startswith("```"):
             response_text = response_text[3:].strip()
-        
+
         # Remove ``` at end (handle both single and triple backticks)
         if response_text.endswith("```"):
             response_text = response_text[:-3].strip()
-        
+
         response_text = response_text.strip()
 
         # Try to extract JSON if there's text before/after
         # Find the first { and try to parse from there
-        json_start = response_text.find('{')
+        json_start = response_text.find("{")
         if json_start > 0:
             # There's text before the JSON, try to extract just the JSON
             response_text = response_text[json_start:]
-        
+
         # Try to find the matching closing brace
         # Count braces to find where JSON ends
         brace_count = 0
         json_end = len(response_text)
         for i, char in enumerate(response_text):
-            if char == '{':
+            if char == "{":
                 brace_count += 1
-            elif char == '}':
+            elif char == "}":
                 brace_count -= 1
                 if brace_count == 0:
                     json_end = i + 1
                     break
-        
+
         # Extract just the JSON portion
         if json_end < len(response_text):
             response_text = response_text[:json_end]
@@ -732,58 +766,70 @@ RULES:
         except json.JSONDecodeError as e:
             # If JSON parsing fails, try to fix common issues
             # 1. Try removing trailing commas before closing braces/brackets
-            fixed_text = re.sub(r',(\s*[}\]])', r'\1', response_text)
-            
+            fixed_text = re.sub(r",(\s*[}\]])", r"\1", response_text)
+
             try:
                 plan_data = json.loads(fixed_text)
             except json.JSONDecodeError as e2:
                 # Still failed, try to extract partial JSON for better error message
                 import traceback
-                original_response_length = len(response.text) if hasattr(response, 'text') else 0
+
+                original_response_length = (
+                    len(response.text) if hasattr(response, "text") else 0
+                )
                 error_msg = f"Failed to parse JSON response: {e}\n"
                 error_msg += f"Error position: line {e.lineno}, column {e.colno}\n"
                 error_msg += f"Original response length: {original_response_length}\n"
                 error_msg += f"Extracted text length: {len(response_text)}\n"
-                error_msg += f"Response text (first 1000 chars): {response_text[:1000]}\n"
+                error_msg += (
+                    f"Response text (first 1000 chars): {response_text[:1000]}\n"
+                )
                 if len(response_text) > 1000:
-                    error_msg += f"... (truncated, total length: {len(response_text)})\n"
+                    error_msg += (
+                        f"... (truncated, total length: {len(response_text)})\n"
+                    )
                 # Also log the original response for debugging
-                if hasattr(response, 'text'):
+                if hasattr(response, "text"):
                     error_msg += f"\nOriginal response (first 500 chars): {response.text[:500]}\n"
                 print(error_msg)
                 traceback.print_exc()
-                
+
                 # Try to provide more helpful error message
                 error_detail = str(e)
-                if hasattr(e, 'pos') and e.pos:
+                if hasattr(e, "pos") and e.pos:
                     error_detail += f" at position {e.pos}"
-                if hasattr(e, 'lineno') and e.lineno:
+                if hasattr(e, "lineno") and e.lineno:
                     error_detail += f" (line {e.lineno}, column {e.colno})"
-                
+
                 # Show more context around the error
                 error_context = ""
-                if hasattr(e, 'pos') and e.pos:
+                if hasattr(e, "pos") and e.pos:
                     start = max(0, e.pos - 50)
                     end = min(len(response_text), e.pos + 50)
                     error_context = f"\n\n**Context around error:**\n```\n{response_text[start:end]}\n```\n"
                     if e.pos < len(response_text):
                         error_context += f"Error is at position {e.pos - start} in the context above.\n"
-                
+
                 return {
                     "query_understanding": query,
-                    "entity_analysis": {"primary_entities": [], "secondary_entities": []},
+                    "entity_analysis": {
+                        "primary_entities": [],
+                        "secondary_entities": [],
+                    },
                     "investigation_type": "ERROR",
                     "geolocations": [],
                     "news_and_sources": [],
                     "formatted_report": f"# Error\n\nFailed to parse response from Gemini API. The response was not valid JSON.\n\n**Error:** {error_detail}\n\n**Response preview:**\n```\n{response_text[:500]}...\n```{error_context}",
-                    "error": f"JSON parsing error: {error_detail}"
+                    "error": f"JSON parsing error: {error_detail}",
                 }
 
         # Generate a formatted markdown report from the plan_data matching IranianPetrochemicalsReport structure
         report = plan_data.get("formatted_report", {})
-        title = report.get("title", plan_data.get("query_understanding", "OSINT Analysis"))
+        title = report.get(
+            "title", plan_data.get("query_understanding", "OSINT Analysis")
+        )
         subtitle = report.get("subtitle", "Intelligence Assessment")
-        
+
         markdown_report = f"# {title}\n\n{subtitle}\n\n"
 
         # Executive Summary (BLUF) with Finding, Risk, Impact
@@ -812,7 +858,9 @@ RULES:
                         step_num = step.get("number", "")
                         step_title = step.get("title", "")
                         step_desc = step.get("description", "")
-                        markdown_report += f"### {step_num}. {step_title}\n\n{step_desc}\n\n"
+                        markdown_report += (
+                            f"### {step_num}. {step_title}\n\n{step_desc}\n\n"
+                        )
 
         # Company Identifiers
         company_ids = report.get("company_identifiers", [])
@@ -831,10 +879,14 @@ RULES:
                 section_num = finding.get("section_number", "")
                 section_title = finding.get("title", "")
                 content = finding.get("content", "")
-                markdown_report += f"### {section_num}. {section_title}\n\n{content}\n\n"
+                markdown_report += (
+                    f"### {section_num}. {section_title}\n\n{content}\n\n"
+                )
         elif report.get("detailed_analysis"):
             # Fallback to old format
-            markdown_report += f"## Findings & Analysis\n\n{report['detailed_analysis']}\n\n"
+            markdown_report += (
+                f"## Findings & Analysis\n\n{report['detailed_analysis']}\n\n"
+            )
 
         # Supply Chain Flow
         supply_chain = report.get("supply_chain_flow", [])
