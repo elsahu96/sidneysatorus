@@ -1,8 +1,25 @@
 node_modules
-# Keep environment variables out of version control
+
+# Environment variables
 .env
 
 # Google Application Default Credentials (contains secrets — do not commit)
 application_default_credentials.json
+
+# Python build artifacts
 __pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+*.egg
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/

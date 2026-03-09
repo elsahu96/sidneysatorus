@@ -5,21 +5,24 @@ FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8080
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies + uv
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -Ls https://astral.sh/uv/install.sh | sh \
+    && mv /root/.local/bin/uv /usr/local/bin/uv
 
-# Copy requirements first for better caching
-COPY requirements.txt .
+# Copy dependency files first for better layer caching
+COPY pyproject.toml uv.lock ./
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies (no dev extras, no editable install)
+RUN uv sync --no-dev --no-editable
 
 # Install spaCy model
 RUN python3 -m spacy download en_core_web_trf
@@ -27,12 +30,10 @@ RUN python3 -m spacy download en_core_web_trf
 # Copy the rest of the application code
 COPY . .
 
-# Generate Prisma client (if needed)
+# Generate Prisma client
 RUN prisma generate --schema=prisma/schema.prisma
 
 # Expose the port the app runs on (default 8080; override at run time with -e PORT=3000)
 EXPOSE ${PORT}
 
-# Command to run the application
-# Using run.py as the entry point based on the project structure
 CMD ["python", "run.py"]

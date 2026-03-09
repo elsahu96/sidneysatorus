@@ -3,14 +3,11 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 
-ARG VITE_API_URL=http://localhost:8080
-ENV VITE_API_URL=$VITE_API_URL
-
 # Copy package files
 COPY package*.json ./
 
 # Install dependencies
-RUN npm install
+RUN npm ci
 
 # Copy project files
 COPY . .
@@ -18,22 +15,15 @@ COPY . .
 # Build the application
 RUN npm run build
 
-# Production stage (Cloud Run sets PORT; default 8080)
+# Production stage
 FROM nginx:stable-alpine
-
-RUN apk add --no-cache gettext
-
-# Remove default config and use template so PORT can be set at runtime
-RUN rm -f /etc/nginx/conf.d/default.conf
-
-COPY nginx.conf.template /etc/nginx/conf.d/default.conf.template
-COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
 
 # Copy built assets from build stage
 COPY --from=build /app/dist /usr/share/nginx/html
 
-ENV PORT=8080
-EXPOSE 8080
+# Copy nginx configuration if you have one, otherwise use default
+# COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-ENTRYPOINT ["/docker-entrypoint.sh"]
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

@@ -1,6 +1,7 @@
 # Welcome to Sidney
 
-## Setup Guide
+## Dev Setup Guide
+
 ### Frontend
 
 1. Navigate to the frontend directory:
@@ -22,18 +23,21 @@
    ```sh
    cd backend
    ```
-2. (Optional) Create and activate a virtual environment:
+2. Install dependencies using [uv](https://docs.astral.sh/uv/) (reads `pyproject.toml`):
    ```sh
-   python -m venv venv
-   source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+   uv sync --extra dev
    ```
-3. Install the necessary dependencies:
+   This automatically creates a `.venv` and a `uv.lock` lockfile. To install without dev dependencies (e.g. in production):
    ```sh
-   pip install -r requirements.txt
+   uv sync
    ```
-4. Run the backend server:
+3. Run the backend server:
    ```sh
-   python run.py
+   uv run python run.py
+   ```
+   Or with uvicorn directly:
+   ```sh
+   uv run uvicorn src.api.main:app --reload
    ```
 
 ### Docker
