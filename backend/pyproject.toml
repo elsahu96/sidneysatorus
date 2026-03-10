@@ -13,56 +13,47 @@ dependencies = [
     "fastapi>=0.135.1",
     "uvicorn[standard]>=0.30.0",
     "python-multipart>=0.0.22",
-
     # LangChain + LangGraph
     "langchain>=0.3.28",
     "langchain-openai>=0.3.35",
     "langchain-anthropic>=0.3.22",
     "langgraph>=0.2.76",
     "deepagents==0.4.7",
-
     # Database
     "prisma>=0.11.0",
-
     # Auth
     "PyJWT>=2.9.0",
     "jwcrypto>=1.5.0",
     "cryptography>=46.0.0",
-
     # Google Cloud
     "google-auth>=2.48.0",
     "google-cloud-storage>=2.18.2",
     "google-genai>=1.56.0",
-
+    "google>=3.0.0",
     # HTTP
     "httpx>=0.28.1",
     "requests>=2.32.5",
-
     # Data / validation
     "pydantic>=2.11.2",
     "pydantic-settings>=2.5.2",
-
     # Utilities
     "python-dotenv>=1.0.1",
     "PyYAML>=6.0.2",
     "tenacity>=9.1.2",
     "tomlkit>=0.14.0",
-
     # NLP
     "spacy>=3.8.11",
-
     # Document generation
     "reportlab>=4.2.5",
     "weasyprint>=63.0",
     "markdown>=3.10.1",
     "Jinja2>=3.1.6",
-
     # Browser automation
     "playwright>=1.48.0",
     "beautifulsoup4>=4.13.4",
-
     # AG-UI
     "ag-ui-protocol>=0.1.10,<0.2",
+    "google>=3.0.0",
 ]
 
 [project.optional-dependencies]
