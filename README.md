@@ -65,7 +65,7 @@ To run the frontend service using Docker:
    ```
 2. Run the container:
    ```sh
-   docker run -p 4567:8567 frontend-service
+   docker run -p 4567:80 frontend-service
    ```
 
 ### Docker Compose (Recommended)

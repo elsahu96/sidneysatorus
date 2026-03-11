@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 
 /** Redirects to /login if not authenticated; otherwise renders children. */
@@ -13,7 +13,7 @@ export function AuthGuard({ children }: { children: ReactNode }) {
     if (!user && location.pathname !== "/login") {
       navigate("/login", { replace: true, state: { from: location.pathname } });
     }
-  }, [user, loading, navigate, location.pathname]);
+  }, [loading, user, location.pathname, navigate]);
 
   if (loading) {
     return (
