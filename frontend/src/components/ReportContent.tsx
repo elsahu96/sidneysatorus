@@ -1,11 +1,14 @@
 import React, { useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
-import { Reference } from "@/components/Reference";
+import { CitationPopover } from "@/components/CitationPopover";
+import { InvestigationReferences } from "@/components/InvestigationReferences";
 import type { ReferenceItem } from "@/components/InvestigationReferences";
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import jsPDF from "jspdf";
+import { InvestigationGeolocationsMap } from "@/components/InvestigationGeolocationsMap";
+import type { GeolocationItem } from "@/types/index";
 
 export interface ReferenceData {
   number: number;
@@ -23,6 +26,8 @@ export interface ReportContentProps {
   enhanced?: boolean;
   /** References rendered inline as &lt;Reference {...references[n]} /&gt; (0-based index n). */
   references?: ReferenceItem[];
+  /** Geolocations to render in the map above the report. */
+  geolocations?: GeolocationItem[];
 }
 
 function toReferenceData(ref: ReferenceItem, index: number): ReferenceData {
@@ -46,6 +51,7 @@ export function ReportContent({
   className,
   enhanced = true,
   references = [],
+  geolocations = [],
 }: ReportContentProps) {
   const reportRef = useRef<HTMLDivElement>(null);
 
@@ -64,32 +70,35 @@ export function ReportContent({
 
   let processedContent = content;
   if (referenceData.length > 0) {
-    // Normalize reference placeholders
+    // Normalize legacy reference placeholders to [n] format
     processedContent = processedContent.replace(
       /<Reference\s+\{\s*\.\.\.references\[(\d+)\]\s*\}\s*\/>/gi,
       (_, indexStr) => {
         const index = parseInt(indexStr, 10);
         if (index >= 0 && index < referenceData.length) {
-          return `__REF_${index + 1}__`;
+          return `[${index + 1}]`;
         }
         return "";
       }
     );
     processedContent = processedContent.replace(/_*REF_MARKER_(\d+)_*/g, (_, num) => {
       const n = parseInt(num, 10);
-      return n >= 1 && n <= referenceData.length ? `__REF_${n}__` : `__REF_${n}__`;
-    });
-    processedContent = processedContent.replace(/\[(\d+)\]/g, (match, num) => {
-      const n = parseInt(num, 10);
-      if (n >= 1 && n <= referenceData.length) return `__REF_${n}__`;
-      return match;
+      return `[${n}]`;
     });
     referenceData.forEach((ref, index) => {
       const escaped = ref.link.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const urlPattern = new RegExp(`\\[([^\\]]+)\\]\\(${escaped}\\)`, "g");
-      processedContent = processedContent.replace(urlPattern, () => `__REF_${index + 1}__`);
+      processedContent = processedContent.replace(urlPattern, () => `[${index + 1}]`);
     });
   }
+
+  // For ReactMarkdown display: escape [n] so the markdown parser treats them as
+  // plain text nodes (not unresolved link references), allowing processText to
+  // intercept them and render CitationPopovers. The PDF uses processedContent
+  // unchanged so citations appear as [n] in the exported document.
+  const displayContent = referenceData.length > 0
+    ? processedContent.replace(/\[(\d+)\](?!\()/g, (_, n) => `\\[${n}\\]`)
+    : processedContent;
 
   const handleDownloadPDF = () => {
     const doc = new jsPDF({
@@ -186,11 +195,7 @@ export function ReportContent({
         if (!inList) y += 2;
         inList = true;
         const listText = line.substring(2).trim();
-        // Replace reference markers with [n] format
-        const textWithRefs = listText.replace(/__REF_(\d+)__/g, (_, num) => {
-          const ref = refByNumber.get(parseInt(num, 10));
-          return ref ? `[${num}]` : `[${num}]`;
-        });
+        const textWithRefs = listText;
         checkPageBreak(5);
         doc.setFontSize(10);
         doc.setFont("helvetica", "normal");
@@ -208,10 +213,7 @@ export function ReportContent({
         const match = line.match(/^\d+\.\s(.+)$/);
         if (match) {
           const listText = match[1].trim();
-          const textWithRefs = listText.replace(/__REF_(\d+)__/g, (_, num) => {
-            const ref = refByNumber.get(parseInt(num, 10));
-            return ref ? `[${num}]` : `[${num}]`;
-          });
+          const textWithRefs = listText;
           checkPageBreak(5);
           doc.setFontSize(10);
           doc.setFont("helvetica", "normal");
@@ -239,13 +241,7 @@ export function ReportContent({
           y += 2;
           inList = false;
         }
-        // Replace reference markers with [n] format
-        const textWithRefs = line.replace(/__REF_(\d+)__/g, (_, num) => {
-          const ref = refByNumber.get(parseInt(num, 10));
-          return ref ? `[${num}]` : `[${num}]`;
-        });
-        // Remove markdown formatting
-        const cleanText = textWithRefs
+        const cleanText = line
           .replace(/\*\*(.+?)\*\*/g, "$1") // Bold
           .replace(/\*(.+?)\*/g, "$1") // Italic
           .replace(/`(.+?)`/g, "$1") // Code
@@ -284,22 +280,21 @@ export function ReportContent({
     doc.save(filename);
   };
 
-  const renderRefOrText = (part: string, key: string): React.ReactNode => {
-    const m = part.match(/^__REF_(\d+)__$/);
-    if (m) {
-      const num = parseInt(m[1], 10);
-      const ref = refByNumber.get(num);
-      if (ref) return <Reference key={key} {...ref} />;
-      return <sup key={key} className="text-muted-foreground">[{num}]</sup>;
-    }
-    return part;
+  const renderCitation = (num: number, key: string): React.ReactNode => {
+    const source = references[num - 1];
+    if (source) return <CitationPopover key={key} num={num} source={source} />;
+    return <sup key={key} className="text-muted-foreground text-xs">[{num}]</sup>;
   };
 
   const processText = (text: string, keyPrefix: string): React.ReactNode[] => {
-    const parts = text.split(/(__REF_\d+__)/g);
-    return parts.map((part, i) =>
-      part.match(/^__REF_\d+__$/) ? renderRefOrText(part, `${keyPrefix}-${i}`) : part
-    );
+    // Split on [n] citation patterns (e.g. [1], [12]) detected directly at render time
+    // to avoid markdown bold-parsing of __REF_n__ placeholder tokens.
+    const parts = text.split(/(\[\d+\])/g);
+    return parts.map((part, i) => {
+      const m = part.match(/^\[(\d+)\]$/);
+      if (m) return renderCitation(parseInt(m[1], 10), `${keyPrefix}-${i}`);
+      return part;
+    });
   };
 
   const processChildren = (node: React.ReactNode, keyPrefix: string): React.ReactNode => {
@@ -308,7 +303,11 @@ export function ReportContent({
       return arr.length === 1 ? arr[0] : <>{arr.map((el, i) => <React.Fragment key={`${keyPrefix}-${i}`}>{el}</React.Fragment>)}</>;
     }
     if (Array.isArray(node)) {
-      return node.map((child, i) => processChildren(child, `${keyPrefix}-${i}`));
+      return node.map((child, i) => (
+        <React.Fragment key={`${keyPrefix}-${i}`}>
+          {processChildren(child, `${keyPrefix}-${i}`)}
+        </React.Fragment>
+      ));
     }
     return node;
   };
@@ -316,7 +315,7 @@ export function ReportContent({
   if (!enhanced) {
     return (
       <div className={cn("prose prose-sm dark:prose-invert max-w-none", className)}>
-        <ReactMarkdown>{processedContent}</ReactMarkdown>
+        <ReactMarkdown>{displayContent}</ReactMarkdown>
       </div>
     );
   }
@@ -334,9 +333,10 @@ export function ReportContent({
           Download PDF
         </Button>
       </div>
-      <div ref={reportRef} className="prose prose-invert max-w-none space-y-8 pt-12">
+      
+      <div ref={reportRef} className={cn("prose prose-invert max-w-none space-y-8", geolocations.length > 0 ? "" : "pt-12")}>
         <ReactMarkdown
-        components={{
+          components={{
           h1: ({ children, ...props }) => (
             <div className="border-b border-border pb-6 mb-6">
               <h1 {...props} className="text-3xl font-bold text-foreground mb-2">
@@ -388,7 +388,7 @@ export function ReportContent({
           ),
           li: ({ children, ...props }) => (
             <li {...props} className="leading-relaxed">
-              {children}
+              {processChildren(children, "li")}
             </li>
           ),
           strong: ({ children, ...props }) => (
@@ -465,8 +465,19 @@ export function ReportContent({
           ),
         }}
       >
-        {processedContent}
+        {displayContent}
       </ReactMarkdown>
+      {geolocations.length > 0 && (
+        <div className="pt-12 mb-6">
+          <h2 className="text-lg font-semibold text-foreground mb-3">Locations</h2>
+          <InvestigationGeolocationsMap geolocations={geolocations} />
+        </div>
+      )}
+      {referenceData.length > 0 && (
+        <div className="mt-8 pt-6 border-t border-border not-prose">
+          <InvestigationReferences items={references} />
+        </div>
+      )}
       </div>
     </div>
   );

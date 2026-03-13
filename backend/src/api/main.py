@@ -4,7 +4,7 @@ load_dotenv()
 
 import os
 import logging
-from api import investigate
+from src.api import investigate, report
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -13,7 +13,7 @@ BUCKET_NAME = (
     os.getenv("GCS_PATH_PREFIX") or "run-sources-satorus-sidney-europe-central2"
 )
 logger = logging.getLogger(__name__)
-_FRONTEND_URL = os.getenv("FRONTEND_URL") or "http://localhost:80"
+_FRONTEND_URL = os.getenv("FRONTEND_URL") or "http://localhost:4567"
 
 
 app = FastAPI(title="Sidney Backend API", version="1.0.0")
@@ -29,6 +29,7 @@ app.add_middleware(
 
 
 app.include_router(investigate.app, tags=["investigate"])
+app.include_router(report.app, tags=["reports"])
 
 
 # Health check endpoint

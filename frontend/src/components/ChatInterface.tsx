@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Loader2, Plus, MapPin } from "lucide-react";
+import { Send, Loader2, Plus } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
+import axios from "axios";
 import { cn } from "@/lib/utils";
 import { InvestigationReport } from "@/components/InvestigationReport";
 import { XAccountSelector } from "@/components/XAccountSelector";
@@ -9,9 +10,9 @@ import { LoadingStages } from "@/components/LoadingStages";
 import { useCaseFiles, type CaseFile } from "@/contexts/CaseFilesContext";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import apiClient from "@/lib/api";
-import { InvestigationGeolocationsMap } from "@/components/InvestigationGeolocationsMap";
-import { InvestigationReferences } from "@/components/InvestigationReferences";
+import { apiClient, API_BASE_URL } from "@/lib/api";
+import type { ReportMetadata, GeolocationItem, ReportSource } from "@/types/index";
+import type { ReferenceItem } from "@/components/InvestigationReferences";
 import { MessageBubble } from "@/components/MessageBubble";
 import { ReportContent } from "@/components/ReportContent";
 import { useChat, type UseChatOptions } from "@/hooks/useChat";
@@ -19,51 +20,34 @@ import { createMessageId } from "@/services/chatService";
 import type { Message as AgUiMessage } from "@/types/chat";
 import type { ChatRunInput } from "@/services/chatService";
 
-/** Response shape from POST /investigate */
-export interface InvestigateApiResponse {
-  formatted_report: string;
-  geolocations: Array<{
-    entity: string;
-    coordinates: [number, number];
-    context: string;
-  }>;
-  news_and_sources: Array<{
-    title: string;
-    url: string;
-    date: string;
-    key_insight: string;
-  }>;
-}
 
-/** Renders the full response from the /investigate API (report, geolocations, news). */
-export const InvestigationApiReport = ({ data }: { data: InvestigateApiResponse }) => {
-  const { formatted_report, geolocations, news_and_sources } = data;
-  const hasGeolocations = geolocations?.length > 0;
-
-  return (
-    <div className="space-y-6">
-      <ReportContent 
-        content={formatted_report || "No report content."} 
-        enhanced={true}
-        references={news_and_sources ?? []}
-      />
-      {hasGeolocations && (
-        <div className="space-y-3">
-          <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-primary" />
-            Locations
-          </h3>
-          <InvestigationGeolocationsMap geolocations={geolocations} />
-        </div>
-      )}
-      <InvestigationReferences items={news_and_sources ?? []} />
-    </div>
-  );
-}
+/** Renders the markdown report content returned by the /report/{stem} endpoint. */
+export const InvestigationApiReport = ({
+  content,
+  geolocations,
+  references,
+}: {
+  content: string;
+  geolocations?: GeolocationItem[];
+  references?: ReferenceItem[];
+}) => (
+  <ReportContent
+    content={content || "No report content."}
+    enhanced={true}
+    references={references ?? []}
+    geolocations={geolocations}
+  />
+);
 
 /** Attachment data for rich assistant messages (investigation report, account selector, etc.) */
 interface MessageAttachment {
-  investigationData?: InvestigateApiResponse;
+  /** Markdown content loaded from the report JSON file. */
+  reportContent?: string;
+  geolocations?: GeolocationItem[];
+  references?: ReferenceItem[];
+  /** File-path metadata kept for future actions (download, case linking). */
+  md_path?: string;
+  json_path?: string;
   isReport?: boolean;
   isAccountSelector?: boolean;
   isRussellCherryReport?: boolean;
@@ -80,6 +64,27 @@ interface PendingReport {
   selectedAccount?: string;
 }
 
+function getInvestigationErrorMessage(err: unknown): string {
+  if (axios.isAxiosError(err)) {
+    const detail = err.response?.data?.detail;
+    if (typeof detail === "string" && detail.trim()) {
+      return detail;
+    }
+    if (
+      typeof err.response?.data === "string" &&
+      /<!doctype html>|<html/i.test(err.response.data)
+    ) {
+      return `API returned HTML instead of JSON. Check VITE_API_URL (${API_BASE_URL}) and ensure backend is running.`;
+    }
+    if (typeof err.response?.data === "string" && err.response.data.trim()) {
+      return err.response.data;
+    }
+    return err.message || "Request failed";
+  }
+  if (err instanceof Error) return err.message;
+  return "Request failed";
+}
+
 export const ChatInterface = () => {
   const [isFocused, setIsFocused] = useState(false);
   const [loadingStages, setLoadingStages] = useState<string[]>([]);
@@ -92,8 +97,19 @@ export const ChatInterface = () => {
   const { addCaseFile } = useCaseFiles();
 
   const performInvestigationApi = useCallback(async (query: string) => {
-    const response = await apiClient.post<InvestigateApiResponse>("/investigate", { query });
-    return response.data;
+    const reportMeta = await apiClient.investigate(query);
+    if (!reportMeta?.id) {
+      throw new Error("Investigation returned no report ID");
+    }
+    const report = await apiClient.getReport(reportMeta.id);
+    const meta = report as ReportMetadata;
+    return {
+      id: reportMeta.id,
+      name: reportMeta.name ?? reportMeta.id,
+      content: meta?.content ?? "",
+      geolocations: meta?.geolocations ?? [],
+      references: (meta?.sources ?? []) as ReferenceItem[],
+    };
   }, []);
 
   const transport = useCallback<NonNullable<UseChatOptions["transport"]>>(
@@ -141,16 +157,21 @@ export const ChatInterface = () => {
         }
 
 
-        const data = await performInvestigationApi(content);
+        const result = await performInvestigationApi(content);
         const id = createMessageId();
         const assistantMsg = {
           id,
           role: "assistant" as const,
-          content: data.formatted_report?.slice(0, 80) ?? "Investigation complete.",
+          content: result.content.slice(0, 80) || "Investigation complete.",
         };
         setAttachmentByMessageId((prev) => ({
           ...prev,
-          [id]: { investigationData: data, isInvestigationApiReport: true },
+          [id]: {
+            reportContent: result.content,
+            geolocations: result.geolocations,
+            references: result.references,
+            isInvestigationApiReport: true,
+          },
         }));
         const caseFileMessages: CaseFile["messages"] = input.messages
           .filter((m) => m.role === "user" || m.role === "assistant")
@@ -160,7 +181,7 @@ export const ChatInterface = () => {
           }));
         caseFileMessages.push({
           role: "assistant",
-          content: assistantMsg.content,
+          content: result.name,
         });
         addCaseFile({
           id: Date.now().toString(),
@@ -179,19 +200,14 @@ export const ChatInterface = () => {
         toast.success("Investigation saved to case files");
         return [assistantMsg];
       } catch (err: unknown) {
-        const message =
-          err instanceof Error
-            ? err.message
-            : typeof err === "object" && err !== null && "response" in err
-              ? String((err as { response?: { data?: { detail?: string } } }).response?.data?.detail ?? "Request failed")
-              : String(err);
+        const message = getInvestigationErrorMessage(err);
         toast.error("Investigation failed: " + message);
         const id = createMessageId();
         return [
           {
             id,
             role: "assistant" as const,
-            content: "Sorry, I encountered an error during the investigation.",
+            content: `Investigation failed: ${message}`,
           },
         ];
       } finally {
@@ -319,7 +335,7 @@ export const ChatInterface = () => {
         </div>
       );
     }
-    if (attachment?.isInvestigationApiReport && attachment.investigationData) {
+    if (attachment?.isInvestigationApiReport && attachment.reportContent) {
       return (
         <div
           key={msg.id}
@@ -327,7 +343,11 @@ export const ChatInterface = () => {
           data-message-id={msg.id}
           data-role="assistant"
         >
-          <InvestigationApiReport data={attachment.investigationData} />
+          <InvestigationApiReport
+            content={attachment.reportContent}
+            geolocations={attachment.geolocations}
+            references={attachment.references}
+          />
         </div>
       );
     }

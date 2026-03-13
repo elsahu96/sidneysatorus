@@ -8,7 +8,14 @@ import { componentTagger } from "lovable-tagger";
 export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
-    port: 80,
+    port: 4567,
+    proxy: {
+      "/api": {
+        target: process.env.VITE_API_URL || "http://localhost:8080",
+        changeOrigin: true,
+        rewrite: (reqPath) => reqPath.replace(/^\/api/, ""),
+      },
+    },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(
     Boolean,

@@ -30,18 +30,23 @@ export const InvestigationReferences = ({ items }: InvestigationReferencesProps)
                 href={item.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-start gap-2 text-foreground hover:text-primary"
+                className="flex items-start gap-3 text-foreground hover:text-primary"
               >
-                <ExternalLink className="h-4 w-4 shrink-0 mt-0.5" />
-                <span>
-                  <span className="font-medium">{item.title}</span>
-                  {item.date && (
-                    <span className="text-muted-foreground text-sm ml-2">{item.date}</span>
-                  )}
+                <span className="shrink-0 mt-0.5 min-w-[1.5rem] text-right text-xs font-mono text-muted-foreground">
+                  [{i + 1}]
+                </span>
+                <span className="flex-1 flex items-start gap-2">
+                  <ExternalLink className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>
+                    <span className="font-medium">{item.title}</span>
+                    {item.date && (
+                      <span className="text-muted-foreground text-sm ml-2">{item.date}</span>
+                    )}
+                  </span>
                 </span>
               </a>
               {item.key_insight && (
-                <p className="text-sm text-muted-foreground mt-2 pl-6">{item.key_insight}</p>
+                <p className="text-sm text-muted-foreground mt-2 pl-10">{item.key_insight}</p>
               )}
             </Card>
           </li>

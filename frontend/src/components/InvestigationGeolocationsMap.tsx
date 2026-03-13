@@ -1,20 +1,30 @@
 import { useEffect, useRef } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
+import type { GeolocationItem } from "@/types/index";
+
+export type { GeolocationItem };
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_API_KEY;
-
-export type GeolocationItem = {
-  entity: string;
-  coordinates: [number, number];
-  context: string;
-};
 
 function escapeHtml(text: string): string {
   const div = document.createElement("div");
   div.textContent = text;
   return div.innerHTML;
 }
+
+const MARKER_COLORS = [
+  // "#ef4444", // red
+  "#f97316", // orange
+  "#eab308", // yellow
+  // "#22c55e", // green
+  // "#06b6d4", // cyan
+  // "#3b82f6", // blue
+  // "#8b5cf6", // violet
+  // "#ec4899", // pink
+  // "#14b8a6", // teal
+  "#f59e0b", // amber
+];
 
 /** Mapbox map that shows investigation geolocations as markers with popups. */
 export const InvestigationGeolocationsMap = ({ geolocations }: { geolocations: GeolocationItem[] }) => {
@@ -47,16 +57,17 @@ export const InvestigationGeolocationsMap = ({ geolocations }: { geolocations: G
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
 
-      geolocations.forEach((loc) => {
+      geolocations.forEach((loc, index) => {
+        const color = MARKER_COLORS[index % MARKER_COLORS.length];
         const el = document.createElement("div");
         el.className = "investigation-map-marker";
         el.innerHTML = `
           <div style="
             width: 24px; height: 24px;
-            background: hsl(var(--primary));
+            background: ${color};
             border: 2px solid white;
             border-radius: 50%;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
             cursor: pointer;
           "></div>
         `;
@@ -64,7 +75,10 @@ export const InvestigationGeolocationsMap = ({ geolocations }: { geolocations: G
         const popup = new mapboxgl.Popup({ offset: 20, closeButton: true })
           .setHTML(
             `<div style="padding: 8px; max-width: 260px; font-family: inherit;">
-              <div style="font-weight: 600; margin-bottom: 4px; color:rgb(12, 14, 16);">${escapeHtml(loc.entity)}</div>
+              <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+                <span style="width:10px; height:10px; border-radius:50%; background:${color}; flex-shrink:0;"></span>
+                <span style="font-weight: 600; color:rgb(12, 14, 16);">${escapeHtml(loc.entity)}</span>
+              </div>
               <div style="font-size: 12px; color:rgb(12, 14, 16); line-height: 1.4;">${escapeHtml(loc.context)}</div>
               <div style="margin-top: 6px; font-size: 11px; color: #64748b;">${loc.coordinates[0].toFixed(4)}, ${loc.coordinates[1].toFixed(4)}</div>
             </div>`

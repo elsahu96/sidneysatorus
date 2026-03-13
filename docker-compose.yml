@@ -11,6 +11,6 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "4567:80"
+      - "4567:4567"
     depends_on:
       - backend

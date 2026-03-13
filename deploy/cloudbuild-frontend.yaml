@@ -6,7 +6,7 @@
 substitutions:
   _REGION: us-central1
   _SERVICE: frontend
-  _BACKEND_URL: https://localhost
+  _BACKEND_URL: https://localhost:8080
 
 steps:
   - name: gcr.io/cloud-builders/docker

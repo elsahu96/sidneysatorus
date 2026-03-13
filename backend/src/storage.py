@@ -8,12 +8,14 @@ import os
 import uuid
 from datetime import timedelta
 
+
 def _bucket():
     bucket_name = os.environ.get("GCS_BUCKET")
     if not bucket_name:
         return None
     try:
         from google.cloud import storage
+
         client = storage.Client()
         return client.bucket(bucket_name)
     except Exception:
@@ -27,7 +29,9 @@ def _blob_key(team_id: str, filename: str) -> str:
     return f"{team_id}/{unique}_{safe}"
 
 
-def upload_file(team_id: str, file_content: bytes, filename: str, content_type: str) -> str | None:
+def upload_file(
+    team_id: str, file_content: bytes, filename: str, content_type: str
+) -> str | None:
     """Upload bytes to GCS under team prefix. Returns storage_key (blob name) or None if GCS not configured."""
     bucket = _bucket()
     if not bucket:

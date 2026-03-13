@@ -1,58 +1,127 @@
 import json
+import logging
 import os
+import re
+import uuid
 from dotenv import load_dotenv
 
 load_dotenv()
-
+from src.graph.tools.writer import _last_write_result  # 直接导入 side-channel
 from deepagents.graph import create_deep_agent
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
 
 from src.graph.agents import planning_subagent, research_subagent, writer_subagent
-from src.graph.tools.writer import _last_write_result
+
+# ── Logging (replaces raw print for non-interactive output) ─────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
+log = logging.getLogger(__name__)
 
 MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME")
+if not MODEL_NAME:
+    raise EnvironmentError("GEMINI_MODEL_NAME is not set in environment")
 
-# Checkpointer is REQUIRED for HITL — it saves state so execution can resume
 checkpointer = MemorySaver()
-
 
 agent = create_deep_agent(
     model=MODEL_NAME,
-    tools=[],  # orchestrator has no direct tools; it delegates via "task" to subagents
+    tools=[],
     subagents=[planning_subagent, research_subagent, writer_subagent],
     checkpointer=checkpointer,
     interrupt_on={
         "search_opoint": {"allowed_decisions": ["approve", "edit", "reject"]},
     },
     system_prompt=SystemMessage(
-        content="""
-        You are an orchestrator agent managing an investigation and writing pipeline.
+        content="""You are an orchestrator agent managing an investigation and writing pipeline.
         For any investigation task:
         1. Use the 'research-agent' subagent to research the topic and gather information.
-        2. Use the 'writer-agent' subagent to write a report based on the information gathered.
-    """
+        2. Use the 'writer-agent' subagent to write a structured JSON report based on the findings.
+        The writer-agent will return a json_path. Include that path in your final message."""
     ),
 )
 
 
+# ── HITL helpers ─────────────────────────────────────────────────────────────
+
+
+def _handle_action_request(action_request: dict, auto_approve: bool) -> dict:
+    """Return a single HITL decision dict for one action request."""
+    tool_name = action_request.get("name", "unknown")
+    description = action_request.get("description", "")
+
+    print(f"\n  [hitl] Tool    : {tool_name}")
+    if description:
+        print(f"  [hitl] Details : {description}")
+
+    if auto_approve:
+        print(f"  [hitl] Auto-approved.")
+        return {"type": "approve"}
+
+    user_input = input("\n  → Approve? (yes / edit / no): ").strip().lower()
+
+    if user_input in ("yes", "y"):
+        print("  [hitl] Approved.")
+        return {"type": "approve"}
+
+    if user_input == "edit":
+        current_args = action_request.get("args", {})
+        print(f"  Current args:\n{json.dumps(current_args, indent=2)}")
+
+        new_args_str = input("  → New arguments (JSON, or Enter to keep): ").strip()
+        new_name = input("  → New tool name (or Enter to keep): ").strip()
+
+        # Safe JSON parse with fallback
+        if new_args_str:
+            try:
+                new_args = json.loads(new_args_str)
+            except json.JSONDecodeError as e:
+                print(f"  [!] Invalid JSON ({e}). Keeping original args.")
+                new_args = current_args
+        else:
+            new_args = current_args
+
+        resolved_name = new_name or tool_name
+        print(f"  [hitl] Edited → '{resolved_name}'.")
+        return {
+            "type": "edit",
+            "edited_action": {"name": resolved_name, "args": new_args},
+        }
+
+    # reject
+    reason = input("  → Reason for rejection (optional): ").strip()
+    print(f"  [hitl] Rejected." + (f" Reason: {reason}" if reason else ""))
+    return {"type": "reject", "message": reason} if reason else {"type": "reject"}
+
+
+# ── Main runner ───────────────────────────────────────────────────────────────
+
+
 def run_with_hitl(
-    task: str, thread_id: str = "thread-1", auto_approve: bool = False
-) -> dict | None:
+    task: str,
+    thread_id: str | None = None,
+    auto_approve: bool = False,
+) -> str | None:
     """
     Run the agent with human-in-the-loop handling.
 
     Args:
-        task:         The task to run.
-        thread_id:    The thread id.
-        auto_approve: Whether to auto-approve HITL requests.
+        task:         The investigation task.
+        thread_id:    Unique thread id. Auto-generated if not provided to avoid
+                      state bleed between runs.
+        auto_approve: Skip human prompts and approve all actions automatically.
 
     Returns:
-        A dict with ``md_path`` and ``json_path`` keys pointing to the files
-        written by the writer-agent, or ``None`` if the writer did not run.
+        The json_path of the written report, or None if the writer did not run.
     """
     _last_write_result.clear()
+    # Auto-generate thread_id to prevent checkpointer state bleed across runs
+    if thread_id is None:
+        thread_id = f"thread-{uuid.uuid4().hex[:8]}"
+
     config = {"configurable": {"thread_id": thread_id}}
 
     print(f"\n{'='*60}")
@@ -61,115 +130,72 @@ def run_with_hitl(
     print(f"  MODEL  : {MODEL_NAME}")
     print(f"{'='*60}\n")
 
-    print("[agent] Invoking agent...")
+    log.info("Invoking agent...")
     result = agent.invoke({"messages": [HumanMessage(content=task)]}, config=config)
-    print("[agent] Initial invocation complete.")
+    log.info("Initial invocation complete.")
 
     iteration = 0
     while True:
         interrupts = result.get("__interrupt__", [])
-
         if not interrupts:
-            print("\n[agent] No pending interrupts — task complete.")
+            log.info("No pending interrupts — task complete.")
             break
 
         iteration += 1
-        interrupt_count = sum(
-            len(i.value.get("action_requests", [])) for i in interrupts
-        )
-        print(
-            f"\n[agent] Iteration {iteration}: paused with "
-            f"{interrupt_count} pending action(s) awaiting approval.\n"
-        )
-
-        decisions: list[dict[str, object]] = []
+        decisions: list[dict] = []
 
         for interrupt in interrupts:
-            hitl_request = interrupt.value  # HITLRequest
-            action_requests = hitl_request.get("action_requests", [])
+            # Defensive: handle unexpected interrupt shapes
+            if not isinstance(interrupt.value, dict):
+                log.warning("Unexpected interrupt format: %s", interrupt.value)
+                continue
+
+            action_requests = interrupt.value.get("action_requests", [])
+            if not action_requests:
+                log.warning(
+                    "Interrupt contained no action_requests: %s", interrupt.value
+                )
+                continue
+
+            print(
+                f"\n[agent] Iteration {iteration}: {len(action_requests)} action(s) pending.\n"
+            )
 
             for action_request in action_requests:
-                tool_name = action_request.get("name", "unknown")
-                description = action_request.get("description", "")
-                print(f"  [hitl] Tool     : {tool_name}")
-                if description:
-                    print(f"  [hitl] Details  : {description}\n")
+                decision = _handle_action_request(action_request, auto_approve)
+                decisions.append(decision)
 
-                if auto_approve:
-                    print(f"  [hitl] Auto-approved '{tool_name}'.")
-                    decisions.append({"type": "approve"})
-                    continue
+        if not decisions:
+            log.warning("No decisions made — breaking to avoid infinite loop.")
+            break
 
-                user_input = input("  → Approve? (yes/edit/no): ").strip().lower()
-
-                if user_input in ("yes", "y"):
-                    print(f"  [hitl] Approved '{tool_name}'.")
-                    decisions.append({"type": "approve"})
-                elif user_input == "edit":
-                    current_args = action_request.get("args", {})
-                    print(f"  Current args: {json.dumps(current_args, indent=2)}")
-                    new_args_str = input(
-                        "  → Enter new arguments (JSON, or Enter to keep): "
-                    ).strip()
-                    new_name = input(
-                        "  → Enter new tool name (or Enter to keep): "
-                    ).strip()
-                    print(f"  [hitl] Edited '{tool_name}' → '{new_name or tool_name}'.")
-                    decisions.append(
-                        {
-                            "type": "edit",
-                            "edited_action": {
-                                "name": new_name or tool_name,
-                                "args": (
-                                    json.loads(new_args_str)
-                                    if new_args_str
-                                    else current_args
-                                ),
-                            },
-                        }
-                    )
-                else:
-                    reason = input("  → Reason for rejection (optional): ").strip()
-                    print(
-                        f"  [hitl] Rejected '{tool_name}'."
-                        + (f" Reason: {reason}" if reason else "")
-                    )
-                    decisions.append(
-                        {"type": "reject", "message": reason}
-                        if reason
-                        else {"type": "reject"}
-                    )
-
-        print(f"\n[agent] Resuming with {len(decisions)} decision(s)...")
+        log.info("Resuming with %d decision(s)...", len(decisions))
         result = agent.invoke(
             Command(resume={"decisions": decisions}),
             config=config,
         )
-        print("[agent] Resume complete.")
+        log.info("Resume complete.")
 
+    # ── Final output ──────────────────────────────────────────────────────────
     messages = result.get("messages", [])
     if messages:
         print(f"\n{'='*60}")
         print("  FINAL OUTPUT")
         print(f"{'='*60}")
         print(messages[-1].content)
-    else:
-        print("\n[agent] No output messages returned.")
 
-    return dict(_last_write_result) or None
+    json_path = _last_write_result.get("json_path")
+    if json_path:
+        log.info("Report written to: %s", json_path)
+    else:
+        log.warning("Writer agent did not return a json_path.")
+
+    return json_path
 
 
 if __name__ == "__main__":
-    """Which Iranian provinces are experiencing the most unrest?
-
-    What targets were hit during the first wave of U.S / Israel attacks on Iran?
-
-    What intelligence justified the pre-emptive strikes on Iran?
-
-    How many Iranian officials were killed in the opening phase of Operation Epic Fury?
-    """
-    run_with_hitl(
-        task="What intelligence justified the pre-emptive strikes on Iran?",
-        thread_id="investigation-workflow-1",
-        auto_approve=False,
+    json_path = run_with_hitl(
+        task="What targets were hit during the first wave of U.S / Israel attacks on Iran?",
+        auto_approve=False,  # thread_id auto-generated
     )
+    print(f"Report written to: {json_path}")
