@@ -12,7 +12,7 @@ import json
 import time
 import re
 import os
-import time
+
 import random
 import threading
 from typing import Any
@@ -34,12 +34,17 @@ from docx.shared import Pt, RGBColor, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import font_hanken_grotesk
 
+load_dotenv()
+
+_COUNTRY = "Brazil"
+_MONTH_YEAR = datetime.now(timezone.utc).strftime("%B %Y")
+
 # Font names Word recognises
 _FONT_REGULAR = "Hanken Grotesk"
 _FONT_MEDIUM = "Hanken Grotesk Medium"
 _FONT_BOLD = "Hanken Grotesk Bold"
-load_dotenv()
-_COUNTRY = "Indonesia"
+
+
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
@@ -60,9 +65,18 @@ REPORTS_DIR = Path("reports")
 
 # Sources for Gemini search (non-Bloomberg)
 SEARCH_SOURCES = [
+    ####### Global #######
     "BBC",
     "Al Jazeera",
     "Financial Times",
+    ####### China #######
+    # "South China Morning Post",
+    # "Reuters",
+    # "BBC China",
+    # "Global Times",
+    # "People's Daily",
+    # "Xinhua",
+    # "CGTN",
     ####### Japan #######
     # "Politico",
     # "NHK World",  # Japan's public broadcaster (English)
@@ -96,13 +110,19 @@ SEARCH_SOURCES = [
     # "Sunday Times",
     # "TimesLive",
     ####### Indonesia #######
-    "Antara",
-    "TVRI",
-    "Metro TV ",
-    "Kompas TV",
-    "CNN Indonesia",
-    "BBC Indonesia",
-    "Reuters",
+    # "Antara",
+    # "TVRI",
+    # "Metro TV ",
+    # "Kompas TV",
+    # "CNN Indonesia",
+    # "BBC Indonesia",
+    # "Reuters",
+    ####### Brazil #######
+    "Folha de S.Paulo",
+    "O Globo",
+    "O Estado de S. Paulo ",
+    "Valor Econômico ",
+    "BBC Brasil",
 ]
 
 BLOCKED_DOMAINS = {
@@ -297,11 +317,10 @@ def get_urls_from_gemini(sources: list[str], min_per_source: int = 10) -> list[s
     Ask Gemini to search for the latest {_COUNTRY} political news URLs
     from the specified sources, returning at least min_per_source per source.
     """
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     sources_list = ", ".join(sources)
 
     prompt = f"""
-Today's date is {today}. The country you need to search for is {_COUNTRY}.
+Today's date is {_MONTH_YEAR}. The country you need to search for is {_COUNTRY}.
 
 Search the web and return a list of URLs to the most recent and politically relevant
 {_COUNTRY} news articles published in the last 30 days from these sources:
@@ -313,7 +332,7 @@ Requirements:
     * Internal politics (elections, constitutional reform, government policy,
       nuclear energy, economic policy, party dynamics)
     * External politics (the shifts in its relationships, strategic alliances, and actions on the global stage, often driven by both domestic interests and international dynamics, trade etc)
-    * {_COUNTRY}'s relationship with the UAE
+    * {_COUNTRY}'s relationship with the UAE — energy, defence, diplomacy, trade etc. 
 - Only return real, working article URLs (not homepage or section-index URLs)
 - Include the most impactful and widely-covered stories
 
@@ -712,7 +731,6 @@ def report_generator(country: str, scraped_results: list[dict]) -> dict:
     - Avoid overly detailed information. Use generic descriptors (e.g., "CEO of X company").Focus on relative variations over absolute numbers
     - Date format: Month DDth (e.g., December 12th)
     """
-    today = datetime.now(timezone.utc).strftime("%B %Y")
 
     # Build a condensed corpus from successful scrapes
     articles_text = ""
@@ -731,7 +749,7 @@ def report_generator(country: str, scraped_results: list[dict]) -> dict:
                 )
 
     prompt = f"""
-You are a senior geopolitical analyst writing a confidential country brief for {country} on {today}.
+You are a senior geopolitical analyst writing a confidential country brief for {country} on {_MONTH_YEAR}.
 
 Below are raw news articles about {country} politics scraped from {SEARCH_SOURCES}.
 
@@ -740,9 +758,20 @@ Write in a sharp, analytical, intelligence-brief style — not a plain summary.
 Highlight strategic implications, signal what is driving key actors, and note what matters for the UAE.
 Bold the most strategically significant sentences.
 
+# MUST FOLLOW THESE RULES:
+- Make sure to use British English consistently. Example:Write "Emphasise" instead of "emphasize". Write "labour" instead of "labor".
+- Abbreviations and Acronyms: Write out abbreviations fully.Use "US" and "UN" (not "U.S." or "U.N.")
+- Currency amounts: Format as "EUR XXm" or "USD XXbn". No currency symbols.
+- Use "%" symbol instead of writing "percent"
+- Quotations: Longer than half a line: in italics. Short quotes: no special formatting
+- Aim for a punchy, journalistic approach.
+- Prioritise clarity and conciseness.
+- Avoid overly detailed information. Use generic descriptors (e.g., "CEO of X company").Focus on relative variations over absolute numbers
+- Date format: Month DDth (e.g., December 12th)
+
 REQUIRED OUTPUT FORMAT (return as JSON):
 {{
-  "title": "Country Report — {country} [SPACE] {today}",
+  "title": "Country Report — {_COUNTRY}\\t\\t\\t\\t    {_MONTH_YEAR}",
   "overview": "Single analytical paragraph summarising the most important strategic developments. Bold the 1-2 most critical sentences using **markdown bold**.",
   "uae_overview": "Single bold paragraph on what the top {country} story means for the UAE specifically.",
   "internal_developments": [
@@ -759,7 +788,13 @@ REQUIRED OUTPUT FORMAT (return as JSON):
     }},
     ... (exactly 3 items)
   ],
-  "uae_relevance": "2-3 paragraph analytical section on {_COUNTRY}'s relevance to UAE interests — energy, defence, diplomacy, trade. **Bold** key sentences. Separate paragraphs with \\n\\n."
+  "uae_relevance": [
+    {{
+      "heading": "Short sub-heading (max 12 words)",
+      "body": "2-4 sentence analytical paragraph. **Bold** the most important sentence."
+    }},
+    ... (exactly 3 items)
+  ],
 }}
 
 ARTICLES:
@@ -859,20 +894,20 @@ def _add_body_para(doc, run_list: list, bold_override: bool = False):
 
 
 def save_report_docx(report: dict) -> Path:
-    """Generate a .docx file matching the Japan Country Report template.
+    """Generate a .docx file matching the {_COUNTRY} Country Report template.
     Pure python-docx — no Node.js or subprocess required.
     """
     out_path = get_report_path()
 
     # Defensive defaults — Gemini occasionally returns unexpected shapes
-    for key in ("internal_developments", "external_developments"):
+    for key in ("internal_developments", "external_developments", "uae_relevance"):
         for item in report.get(key, []):
             item.setdefault("heading", "")
             item.setdefault("body", "")
 
-    uae_relevance = report.get("uae_relevance", "")
-    if isinstance(uae_relevance, list):
-        uae_relevance = "\n\n".join(uae_relevance)
+    # uae_relevance = report.get("uae_relevance", "")
+    # if isinstance(uae_relevance, list):
+    #     uae_relevance = "\n\n".join(uae_relevance)
 
     doc = DocxDocument()
 
@@ -886,7 +921,11 @@ def save_report_docx(report: dict) -> Path:
     # Title
     title_para = doc.add_paragraph()
     title_para.paragraph_format.space_after = Pt(16)
-    run = title_para.add_run(report.get("title", "Country Report — Japan"))
+    run = title_para.add_run(
+        report.get(
+            "title", f"Country Report — {_COUNTRY}\t\t\t\t" + " " * 4 + _MONTH_YEAR
+        )
+    )
     run.bold = True
     run.font.name = "Lora"
     run.font.size = Pt(16)
@@ -919,9 +958,9 @@ def save_report_docx(report: dict) -> Path:
 
     # 3. Of Relevance to the UAE
     _add_section_heading(doc, "3", "Of Relevance to the UAE")
-    for para_text in uae_relevance.split("\n\n"):
-        if para_text.strip():
-            _add_body_para(doc, _parse_bold_runs(para_text), bold_override=True)
+    for i, item in enumerate(report.get("external_developments", []), 1):
+        _add_sub_heading(doc, f"3.{i}.", item["heading"])
+        _add_body_para(doc, _parse_bold_runs(item["body"]))
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(out_path))
@@ -958,7 +997,7 @@ def main():
         )
 
         # Save raw scrape results for debugging
-        with open("scraped_results.json", "w") as f:
+        with open(f"scraped_results_{_COUNTRY}.json", "w") as f:
             json.dump(scraped_results, f, indent=2, default=str)
         tprint("[Scrape] Raw results saved → scraped_results.json")
 
