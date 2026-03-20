@@ -4,7 +4,7 @@ load_dotenv()
 
 import os
 import logging
-from src.api import investigate, report
+from src.api import investigate, report, user
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -30,6 +30,7 @@ app.add_middleware(
 
 app.include_router(investigate.app, tags=["investigate"])
 app.include_router(report.app, tags=["reports"])
+app.include_router(user.app, tags=["user"])
 
 
 # Health check endpoint

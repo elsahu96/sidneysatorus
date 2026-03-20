@@ -6,6 +6,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { auth } from "@/firebase";
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+} from "firebase/auth";
+
+function getTenantId(email) {
+  if (email.endsWith("@satorus.com")) return "Satorus-kpar0";
+  // if (email.endsWith("@company-b.com")) return "tenant-b-id-xxxx";
+  return null; // default tenant
+}
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -42,7 +53,16 @@ const Login = () => {
     setError("");
     setLoading(true);
     try {
-      await signIn(email, password);
+      const tenantId = getTenantId(email);
+      auth.tenantId = tenantId; // 关键：切换到对应 tenant
+
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const idToken = await userCredential.user.getIdToken();
+
+      // 把 token 存起来，后续 API 请求用
+      localStorage.setItem("idToken", idToken);
+
+      await callBackend(idToken);
       // useEffect will redirect when user is set
     } catch (err: unknown) {
       setError(messageFromError(err));
@@ -56,13 +76,27 @@ const Login = () => {
     setError("");
     setLoading(true);
     try {
-      await signUp(email, password, name || undefined);
+      const userCred = await createUserWithEmailAndPassword(auth, email, password);
+      const idToken = await userCred.user.getIdToken();
+      await callBackend(idToken); // send to the backend
       // useEffect will redirect when user is set
     } catch (err: unknown) {
       setError(messageFromError(err));
     } finally {
       setLoading(false);
     }
+  };
+
+  // 发送 ID Token 到后端
+  const callBackend = async (idToken) => {
+    const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/protected`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+      },
+    });
+    const data = await res.json();
+    console.log("后端返回：", data);
   };
 
   if (authLoading) {
