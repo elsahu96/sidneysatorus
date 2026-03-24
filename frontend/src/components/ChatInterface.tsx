@@ -3,6 +3,7 @@ import { Send, Loader2, Plus } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
 import { InvestigationReport } from "@/components/InvestigationReport";
 import { XAccountSelector } from "@/components/XAccountSelector";
 import { RussellCherryReport } from "@/components/RussellCherryReport";
@@ -86,6 +87,7 @@ function getInvestigationErrorMessage(err: unknown): string {
 }
 
 export const ChatInterface = () => {
+  const { user } = useAuth();
   const [isFocused, setIsFocused] = useState(false);
   const [loadingStages, setLoadingStages] = useState<string[]>([]);
   const [attachmentByMessageId, setAttachmentByMessageId] = useState<Record<string, MessageAttachment>>({});
@@ -379,7 +381,7 @@ export const ChatInterface = () => {
       {!hasMessages ? (
         <div className="flex flex-col items-center justify-center flex-1 px-4">
           <div className="mb-8 text-center">
-            <h2 className="mb-2 text-3xl font-semibold text-foreground">Welcome back, Harry.</h2>
+            <h2 className="mb-2 text-3xl font-semibold text-foreground">Welcome back, {user?.displayName ?? user?.email ?? "Guest"}.</h2>
 
 
           </div>

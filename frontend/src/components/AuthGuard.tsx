@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
 
 /** Redirects to /login if not authenticated; otherwise renders children. */
 export function AuthGuard({ children }: { children: ReactNode }) {

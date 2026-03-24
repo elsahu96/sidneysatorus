@@ -4,7 +4,7 @@ node_modules
 .env
 
 # Google Application Default Credentials (contains secrets — do not commit)
-application_default_credentials.json
+service-account.json
 
 # Python build artifacts
 __pycache__/
