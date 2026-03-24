@@ -33,9 +33,11 @@ dependencies = [
     "google-genai>=1.56.0",
     "google>=3.0.0",
     # HTTP
+    "slowapi>=0.1.9",
     "httpx>=0.28.1",
     "requests>=2.32.5",
     # Data / validation
+    "email-validator>=2.3.0",
     "pydantic>=2.11.2",
     "pydantic-settings>=2.5.2",
     # Utilities

@@ -1,13 +1,13 @@
 import axios from "axios";
 import type { ReportMetadata } from "@/types/index";
+import { auth } from "@/firebase";
 
-// Base URL - use environment variable
 export const API_BASE_URL =
   import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 // Create axios instance
 const api = axios.create({
-  baseURL: "/api",
+  baseURL: "/",
   headers: {
     "Content-Type": "application/json",
   },
@@ -15,6 +15,13 @@ const api = axios.create({
 });
 
 export const apiClient = {
+  
+  // getUser: (id: string) => {
+  //   return api.get<{ user: User }>(`/user/profile/${id}`);
+  // },
+  // updateUser: (id: string, data: Partial<User>) => {
+  //   return api.put<{ user: User }>(`/user/profile/${id}`, data);
+  // },
   /** Query the agent with a natural language question */
   investigate: (req: string) => {
     console.log("[investigate] req:", req);

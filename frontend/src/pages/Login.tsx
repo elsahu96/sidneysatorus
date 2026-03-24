@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
+import { userService } from "@/services/userService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,27 +10,32 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { auth } from "@/firebase";
 import {
   createUserWithEmailAndPassword,
+  getAuth,
   signInWithEmailAndPassword,
+  updateProfile,
 } from "firebase/auth";
+import { getTenantId } from "@/services/tenantService";
+import { apiClient } from "@/lib/api";
+import axios from "axios";
 
-function getTenantId(email) {
-  if (email.endsWith("@satorus.com")) return "Satorus-kpar0";
-  // if (email.endsWith("@company-b.com")) return "tenant-b-id-xxxx";
-  return null; // default tenant
-}
+
 
 const Login = () => {
+  const { user, loading, refreshUser } = useAuth();
+  const [skipRedirect, setSkipRedirect] = useState(false); 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
   const navigate = useNavigate();
-  const { user, loading: authLoading, signIn, signUp } = useAuth();
 
   useEffect(() => {
-    if (user) navigate("/", { replace: true });
-  }, [user, navigate]);
+    if (!loading && user && !skipRedirect) {
+      navigate("/", { replace: true });
+    }
+  }, [user, loading, navigate, skipRedirect]);
 
   const messageFromError = (err: unknown): string => {
     const msg = err instanceof Error ? err.message : String(err);
@@ -42,8 +48,8 @@ const Login = () => {
     if (/email-already-in-use/i.test(msg)) {
       return "An account with this email already exists.";
     }
-    if (/failed to fetch|cannot reach auth|network/i.test(msg) || err instanceof TypeError) {
-      return "Cannot reach auth service. Check your connection and that Supabase is configured (VITE_SUPABASE_URL and key in .env).";
+    if (/failed to fetch|network request failed|net::err/i.test(msg)) {
+      return "Cannot reach auth service. Check your connection.";
     }
     return msg;
   };
@@ -51,55 +57,80 @@ const Login = () => {
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setLoading(true);
+    setSkipRedirect(true); // ✅ 先阻止自动跳转
+
+
     try {
+      console.log("Calling backend with email:", email);
       const tenantId = getTenantId(email);
-      auth.tenantId = tenantId; // 关键：切换到对应 tenant
-
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const idToken = await userCredential.user.getIdToken();
-
-      // 把 token 存起来，后续 API 请求用
-      localStorage.setItem("idToken", idToken);
-
-      await callBackend(idToken);
+      console.log("Tenant ID:", tenantId);
+      if (!tenantId) {
+        setError("This email domain is not associated with any organisation.");
+        return;
+      }
+      const freshAuth = getAuth();
+      freshAuth.tenantId = tenantId;
+      const userCredential = await signInWithEmailAndPassword(freshAuth, email, password);
+      console.log("User:", userCredential.user);
+      await userService.sendIdToken();
+      navigate("/", { replace: true });
       // useEffect will redirect when user is set
     } catch (err: unknown) {
       setError(messageFromError(err));
     } finally {
-      setLoading(false);
+      setSubmitting(false);
+      setSkipRedirect(false);
     }
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setLoading(true);
+    setSubmitting(true);
+    setSkipRedirect(true); 
     try {
-      const userCred = await createUserWithEmailAndPassword(auth, email, password);
-      const idToken = await userCred.user.getIdToken();
-      await callBackend(idToken); // send to the backend
-      // useEffect will redirect when user is set
+      console.log("auth.tenantId:", auth.tenantId);
+      console.log("auth.app.options:", auth.app.options);
+      const tenantId = getTenantId(email);
+      if (!tenantId) {
+        // TODO: create a new tenant 
+        setError("This email domain is not associated with any organisation.");
+        return;
+      }
+      console.log("Registering user with email:", email);
+      console.log("Tenant ID:", tenantId);
+      const resp = await userService.registerUser(email, password, tenantId);
+      if (resp.status !== 200) {
+        setError(resp.data?.detail ?? "Registration failed.");
+        return;
+      }
+      console.log("Setting tenant ID:", tenantId);
+      auth.tenantId = tenantId;
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      console.log("User credential:", userCredential);
+      if (name.trim()) {
+        await updateProfile(userCredential.user, { displayName: name.trim() });
+        await refreshUser();
+      }
+  
+      console.log("Calling backend with ID Token:");
+      
+      await userService.sendIdToken(); // send to the backend
+      navigate("/", { replace: true });
     } catch (err: unknown) {
-      setError(messageFromError(err));
+      if (axios.isAxiosError(err)) {
+        setError(err.response?.data?.detail ?? err.message);
+      } else {
+        setError(messageFromError(err));
+      }
     } finally {
-      setLoading(false);
+      setSubmitting(false);
+      setSkipRedirect(false); 
     }
   };
 
-  // 发送 ID Token 到后端
-  const callBackend = async (idToken) => {
-    const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/protected`, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${idToken}`,
-      },
-    });
-    const data = await res.json();
-    console.log("后端返回：", data);
-  };
 
-  if (authLoading) {
+  if (submitting) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <p className="text-muted-foreground">Loading…</p>

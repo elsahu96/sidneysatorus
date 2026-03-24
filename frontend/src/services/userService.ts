@@ -1,40 +1,47 @@
-import apiClient from '@/lib/api';
+import axios from "axios";
+import type { ReportMetadata } from "@/types/index";
+import { auth } from "@/firebase";
 
-export interface User {
-    id: string;
-    email: string;
-    name: string;
-    createdAt: string;
-    updatedAt: string;
-}
+export const API_BASE_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:8000";
 
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    "Content-Type": "application/json",
+  },
+  withCredentials: true, // Important for cookies/sessions
+});
 export const userService = {
-    // Get all users
-    async getUsers(): Promise<User[]> {
-        const response = await apiClient.get<{ users: User[] }>('/api/users');
-        return response.users;
-    },
+  registerUser: async (email: string, password: string, tenantId: string) => {
+    return api.post(`${API_BASE_URL}/user/register`, {
+      email,
+      password,
+      tenantId,
+    });
+  },
 
-    // Get single user
-    async getUser(id: string): Promise<User> {
-        const response = await apiClient.get<{ user: User }>(`/api/users/${id}`);
-        return response.user;
-    },
+  // 发送 ID Token 到后端
+  sendIdToken: async () => {
+    const user = auth.currentUser;
+    if (!user) throw new Error("Not logged in");
 
-    // Create user
-    async createUser(data: { email: string; name: string }): Promise<User> {
-        const response = await apiClient.post<{ user: User }>('/api/users', data);
-        return response.user;
-    },
+    const idToken = await user.getIdToken(); // 自动刷新过期 token
+    const res = await fetch(`${API_BASE_URL}/auth/protected`, {
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        "Content-Type": "application/json",
+      },
+    });
 
-    // Update user
-    async updateUser(id: string, data: Partial<User>): Promise<User> {
-        const response = await apiClient.put<{ user: User }>(`/api/users/${id}`, data);
-        return response.user;
-    },
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.detail ?? `Auth failed: ${res.status}`);
+    }
+    return res;
+  },
 
-    // Delete user
-    async deleteUser(id: string): Promise<void> {
-        await apiClient.delete(`/api/users/${id}`);
-    },
+  signout: () => {
+    return api.post("/auth/signout");
+  },
 };

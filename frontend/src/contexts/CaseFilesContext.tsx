@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef, ReactNode } from "react";
 import * as caseFilesApi from "@/services/caseFilesApi";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
 
 export interface CaseFile {
   id: string;
@@ -77,7 +77,7 @@ interface CaseFilesContextType {
 const CaseFilesContext = createContext<CaseFilesContextType | undefined>(undefined);
 
 export const CaseFilesProvider = ({ children }: { children: ReactNode }) => {
-  const { user, session, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const backendSynced = useRef(false);
 
   const [caseFiles, setCaseFiles] = useState<CaseFile[]>(() => {
@@ -154,12 +154,8 @@ export const CaseFilesProvider = ({ children }: { children: ReactNode }) => {
 
   // Backend sync disabled: use local state only (no GET /api/case-files, /api/folders, /api/projects)
   useEffect(() => {
-    if (authLoading || !user || !session?.access_token) return;
-    const token = session.access_token;
-    localStorage.setItem("access_token", token);
-    if (session.refresh_token) {
-      localStorage.setItem("refresh_token", session.refresh_token);
-    }
+    if (authLoading || !user || !localStorage.getItem("idToken")) return;
+    const token = localStorage.getItem("idToken");
     // Skip backend fetch; data stays in localStorage / initial state. Set USE_CASE_FILES_BACKEND = true to re-enable.
     const USE_CASE_FILES_BACKEND = false;
     if (!USE_CASE_FILES_BACKEND) return;
@@ -181,7 +177,7 @@ export const CaseFilesProvider = ({ children }: { children: ReactNode }) => {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, user, session?.access_token]);
+  }, [authLoading, user, localStorage.getItem("idToken")]);
 
   useEffect(() => {
     if (!backendSynced.current) {

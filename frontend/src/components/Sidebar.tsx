@@ -2,7 +2,9 @@ import { Home, Globe, FolderOpen, Settings, LogOut, ChevronLeft, ChevronRight } 
 import { NavLink, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useSidebarContext } from "@/contexts/SidebarContext";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
+import { apiClient } from "@/lib/api";
+import { useSignOut } from "@/hooks/useSignout";
 
 const navigationItems = [
   { title: "Home", icon: Home, path: "/", resetChat: true },
@@ -13,13 +15,10 @@ const navigationItems = [
 
 export const Sidebar = () => {
   const { isCollapsed, setIsCollapsed } = useSidebarContext();
-  const { signOut } = useAuth();
+  const { user, loading } = useAuth();
+  const { handleSignOut } = useSignOut();
   const navigate = useNavigate();
 
-  const handleSignOut = async () => {
-    await signOut();
-    navigate("/login", { replace: true });
-  };
 
   return (
     <aside className={cn(
