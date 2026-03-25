@@ -28,8 +28,11 @@ concurrency:
 env:
   PROJECT_ID: satorus-sidney-dev
   REGION: europe-west2
+  # GAR Docker path must be HOST/PROJECT/REPOSITORY/IMAGE — the last segment is the package name inside the repo.
   GAR_BACKEND: ai-sidney-backend
+  GAR_BACKEND_IMAGE: backend
   GAR_FRONTEND: ai-sidney-frontend
+  GAR_FRONTEND_IMAGE: frontend
   # Match modules/cloud_run: "${replace(app_name,'_','-')}-backend-${environment}" (override via repo Variables if needed)
   CLOUD_RUN_BACKEND_SERVICE: ${{ vars.CLOUD_RUN_BACKEND_SERVICE || 'ai-sidney-backend-staging' }}
   CLOUD_RUN_FRONTEND_SERVICE: ${{ vars.CLOUD_RUN_FRONTEND_SERVICE || 'ai-sidney-frontend-staging' }}
@@ -61,7 +64,7 @@ jobs:
       - name: Build and push backend
         run: |
           set -euo pipefail
-          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${GAR_BACKEND}"
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${GAR_BACKEND}/${GAR_BACKEND_IMAGE}"
           TAG="${GITHUB_SHA:0:12}"
           docker build \
             -t "${IMAGE}:${TAG}" \
@@ -81,7 +84,7 @@ jobs:
             echo "::error::Set repository variable VITE_API_URL (Settings → Secrets and variables → Actions → Variables) to your backend Cloud Run HTTPS URL."
             exit 1
           fi
-          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${GAR_FRONTEND}"
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${GAR_FRONTEND}/${GAR_FRONTEND_IMAGE}"
           TAG="${GITHUB_SHA:0:12}"
           docker build \
             --build-arg "VITE_API_URL=${VITE_API_URL}" \
