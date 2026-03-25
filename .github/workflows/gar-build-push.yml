@@ -1,0 +1,118 @@
+# Build backend + frontend Docker images, push to Google Artifact Registry, then deploy to Cloud Run.
+# Auth: Workload Identity Federation (OIDC) — no JSON keys in GitHub secrets.
+#
+# Required GitHub secrets:
+#   GCP_WORKLOAD_IDENTITY_PROVIDER — full resource name of the WIF provider
+#   GCP_SERVICE_ACCOUNT_EMAIL      — SA email (needs artifactregistry.writer + run.developer; see GITHUB_ACTIONS_GCP.md)
+#
+# Required GitHub Variables (Settings → Secrets and variables → Actions → Variables):
+#   VITE_API_URL — public backend base URL for the SPA (e.g. https://ai-sidney-backend-staging-xxxxx.run.app)
+#
+# Optional Variables (defaults match Terraform staging: app_name ai_sidney, environment staging):
+#   CLOUD_RUN_BACKEND_SERVICE  — e.g. ai-sidney-backend-staging
+#   CLOUD_RUN_FRONTEND_SERVICE — e.g. ai-sidney-frontend-staging
+#
+name: Build, push, and deploy to Cloud Run
+
+on:
+  push:
+    branches:
+      - staging
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: gar-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PROJECT_ID: satorus-sidney-dev
+  REGION: europe-west2
+  GAR_BACKEND: ai-sidney-backend
+  GAR_FRONTEND: ai-sidney-frontend
+  # Match modules/cloud_run: "${replace(app_name,'_','-')}-backend-${environment}" (override via repo Variables if needed)
+  CLOUD_RUN_BACKEND_SERVICE: ${{ vars.CLOUD_RUN_BACKEND_SERVICE || 'ai-sidney-backend-staging' }}
+  CLOUD_RUN_FRONTEND_SERVICE: ${{ vars.CLOUD_RUN_FRONTEND_SERVICE || 'ai-sidney-frontend-staging' }}
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push backend
+        run: |
+          set -euo pipefail
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${GAR_BACKEND}"
+          TAG="${GITHUB_SHA:0:12}"
+          docker build \
+            -t "${IMAGE}:${TAG}" \
+            -t "${IMAGE}:latest" \
+            -f backend/Dockerfile \
+            backend
+          docker push "${IMAGE}:${TAG}"
+          docker push "${IMAGE}:latest"
+          echo "BACKEND_IMAGE=${IMAGE}:${TAG}" >> "$GITHUB_ENV"
+
+      - name: Build and push frontend
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${VITE_API_URL:-}" ]; then
+            echo "::error::Set repository variable VITE_API_URL (Settings → Secrets and variables → Actions → Variables) to your backend Cloud Run HTTPS URL."
+            exit 1
+          fi
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${GAR_FRONTEND}"
+          TAG="${GITHUB_SHA:0:12}"
+          docker build \
+            --build-arg "VITE_API_URL=${VITE_API_URL}" \
+            -t "${IMAGE}:${TAG}" \
+            -t "${IMAGE}:latest" \
+            -f frontend/Dockerfile \
+            frontend
+          docker push "${IMAGE}:${TAG}"
+          docker push "${IMAGE}:latest"
+          echo "FRONTEND_IMAGE=${IMAGE}:${TAG}" >> "$GITHUB_ENV"
+
+      # Point each Cloud Run service at the images built in this run (same 12-char SHA tag).
+      - name: Deploy to Cloud Run
+        run: |
+          set -euo pipefail
+          echo "Deploying backend → ${CLOUD_RUN_BACKEND_SERVICE}"
+          gcloud run services update "${CLOUD_RUN_BACKEND_SERVICE}" \
+            --region="${REGION}" \
+            --project="${PROJECT_ID}" \
+            --image="${BACKEND_IMAGE}"
+          echo "Deploying frontend → ${CLOUD_RUN_FRONTEND_SERVICE}"
+          gcloud run services update "${CLOUD_RUN_FRONTEND_SERVICE}" \
+            --region="${REGION}" \
+            --project="${PROJECT_ID}" \
+            --image="${FRONTEND_IMAGE}"
+
+      - name: Summary
+        run: |
+          echo "### Images pushed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Backend: \`${BACKEND_IMAGE}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Frontend: \`${FRONTEND_IMAGE}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Cloud Run" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${CLOUD_RUN_BACKEND_SERVICE}\` and \`${CLOUD_RUN_FRONTEND_SERVICE}\` updated in \`${REGION}\`." >> "$GITHUB_STEP_SUMMARY"
