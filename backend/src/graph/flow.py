@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import uuid
+from time import sleep
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -19,7 +20,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME")
 if not MODEL_NAME:
@@ -117,79 +118,75 @@ def run_with_hitl(
     Returns:
         The json_path of the written report, or None if the writer did not run.
     """
-    _last_write_result.clear()
-    # Auto-generate thread_id to prevent checkpointer state bleed across runs
-    if thread_id is None:
-        thread_id = f"thread-{uuid.uuid4().hex[:8]}"
+    # ############################################################
 
-    config = {"configurable": {"thread_id": thread_id}}
+    # _last_write_result.clear()
+    # # Auto-generate thread_id to prevent checkpointer state bleed across runs
+    # if thread_id is None:
+    #     thread_id = f"thread-{uuid.uuid4().hex[:8]}"
 
-    print(f"\n{'='*60}")
-    print(f"  TASK   : {task}")
-    print(f"  THREAD : {thread_id}")
-    print(f"  MODEL  : {MODEL_NAME}")
-    print(f"{'='*60}\n")
+    # config = {"configurable": {"thread_id": thread_id}}
 
-    log.info("Invoking agent...")
-    result = agent.invoke({"messages": [HumanMessage(content=task)]}, config=config)
-    log.info("Initial invocation complete.")
+    # logger.info("Invoking agent...")
+    # result = agent.invoke({"messages": [HumanMessage(content=task)]}, config=config)
+    # logger.info("Initial invocation complete.")
 
-    iteration = 0
-    while True:
-        interrupts = result.get("__interrupt__", [])
-        if not interrupts:
-            log.info("No pending interrupts — task complete.")
-            break
+    # iteration = 0
+    # while True:
+    #     interrupts = result.get("__interrupt__", [])
+    #     if not interrupts:
+    #         logger.info("No pending interrupts — task complete.")
+    #         break
 
-        iteration += 1
-        decisions: list[dict] = []
+    #     iteration += 1
+    #     decisions: list[dict] = []
 
-        for interrupt in interrupts:
-            # Defensive: handle unexpected interrupt shapes
-            if not isinstance(interrupt.value, dict):
-                log.warning("Unexpected interrupt format: %s", interrupt.value)
-                continue
+    #     for interrupt in interrupts:
+    #         # Defensive: handle unexpected interrupt shapes
+    #         if not isinstance(interrupt.value, dict):
+    #             logger.warning("Unexpected interrupt format: %s", interrupt.value)
+    #             continue
 
-            action_requests = interrupt.value.get("action_requests", [])
-            if not action_requests:
-                log.warning(
-                    "Interrupt contained no action_requests: %s", interrupt.value
-                )
-                continue
+    #         action_requests = interrupt.value.get("action_requests", [])
+    #         if not action_requests:
+    #             logger.warning(
+    #                 "Interrupt contained no action_requests: %s", interrupt.value
+    #             )
+    #             continue
 
-            print(
-                f"\n[agent] Iteration {iteration}: {len(action_requests)} action(s) pending.\n"
-            )
+    #         logger.info(
+    #             "Iteration %d: %d action(s) pending.", iteration, len(action_requests)
+    #         )
 
-            for action_request in action_requests:
-                decision = _handle_action_request(action_request, auto_approve)
-                decisions.append(decision)
+    #         for action_request in action_requests:
+    #             decision = _handle_action_request(action_request, auto_approve)
+    #             decisions.append(decision)
 
-        if not decisions:
-            log.warning("No decisions made — breaking to avoid infinite loop.")
-            break
+    #     if not decisions:
+    #         logger.warning("No decisions made — breaking to avoid infinite loop.")
+    #         break
 
-        log.info("Resuming with %d decision(s)...", len(decisions))
-        result = agent.invoke(
-            Command(resume={"decisions": decisions}),
-            config=config,
-        )
-        log.info("Resume complete.")
+    #     logger.info("Resuming with %d decision(s)...", len(decisions))
+    #     result = agent.invoke(
+    #         Command(resume={"decisions": decisions}),
+    #         config=config,
+    #     )
+    #     logger.info("Resume complete.")
 
-    # ── Final output ──────────────────────────────────────────────────────────
-    messages = result.get("messages", [])
-    if messages:
-        print(f"\n{'='*60}")
-        print("  FINAL OUTPUT")
-        print(f"{'='*60}")
-        print(messages[-1].content)
+    # # ── Final output ──────────────────────────────────────────────────────────
+    # messages = result.get("messages", [])
+    # if messages:
+    #     logger.info("Final output: %s", messages[-1].content)
 
-    json_path = _last_write_result.get("json_path")
-    if json_path:
-        log.info("Report written to: %s", json_path)
-    else:
-        log.warning("Writer agent did not return a json_path.")
+    # json_path = _last_write_result.get("json_path")
+    # if json_path:
+    #     logger.info("Report written to: %s", json_path)
+    # else:
+    #     logger.warning("Writer agent did not return a json_path.")
 
+    # ############################################################
+    sleep(10)
+    json_path = "/Users/elsahu/projects/sidneybysatorus-endeavour-main/reports/report_20260320_115451.json"
     return json_path
 
 

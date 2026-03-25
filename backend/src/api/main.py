@@ -1,4 +1,7 @@
 from dotenv import load_dotenv
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+import asyncio
+import os
 
 load_dotenv()
 
@@ -67,3 +70,21 @@ def protected(user: dict = Depends(verify_token)):
         "uid": user["uid"],
         "tenant": user["tenant_id"],
     }
+
+
+@app.websocket("/ws/{task_id}")
+async def websocket_endpoint(websocket: WebSocket, task_id: str):
+    # FastAPI default checks the Origin in the Headers
+    # If forwarded through Vite proxy, Origin may be http://localhost:4567
+
+    # Force accept the connection (this will skip the default same-origin check)
+    await websocket.accept()
+
+    try:
+        while True:
+            # Logic to check the report file generation
+            await asyncio.sleep(1)
+            # Logic to send the completed message
+            # await websocket.send_json({"status": "completed"})
+    except WebSocketDisconnect:
+        print(f"Client {task_id} disconnected")

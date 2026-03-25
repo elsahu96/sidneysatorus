@@ -67,6 +67,7 @@ async def list_reports():
 
 @app.get("/{report_id}")
 async def get_report(report_id: str):
+    logger.info("GET /reports/{report_id}: getting report report_id=%s", report_id)
     report_dir = _report_dir()
     json_path = report_dir / f"{report_id}.json"
 
