@@ -3,10 +3,11 @@
 #
 # Required GitHub secrets:
 #   GCP_WORKLOAD_IDENTITY_PROVIDER — full resource name of the WIF provider
-#   GCP_SERVICE_ACCOUNT_EMAIL      — SA email (needs artifactregistry.writer + run.developer; see GITHUB_ACTIONS_GCP.md)
+#   GCP_SERVICE_ACCOUNT_EMAIL      — SA email (artifactregistry.writer, run.developer, and
+#                                  serviceAccountUser on Cloud Run runtime SAs — see GITHUB_ACTIONS_GCP.md)
 #
 # Required GitHub Variables (Settings → Secrets and variables → Actions → Variables):
-#   VITE_API_URL — public backend base URL for the SPA (e.g. https://ai-sidney-backend-staging-xxxx.run.app)
+#   VITE_API_URL — public backend base URL for the SPA (e.g. https://ai-sidney-backend-staging-zzzz.run.app)
 #
 # Optional Variables (defaults match Terraform staging: app_name ai_sidney, environment staging):
 #   CLOUD_RUN_BACKEND_SERVICE  — e.g. ai-sidney-backend-staging
