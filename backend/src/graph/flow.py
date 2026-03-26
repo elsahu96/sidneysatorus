@@ -13,7 +13,12 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
 
-from src.graph.agents import planning_subagent, research_subagent, writer_subagent
+from src.graph.agents import (
+    planning_subagent,
+    research_subagent,
+    writer_subagent,
+    asknews_subagent,
+)
 
 # ── Logging (replaces raw print for non-interactive output) ─────────────────
 logging.basicConfig(
@@ -31,7 +36,7 @@ checkpointer = MemorySaver()
 agent = create_deep_agent(
     model=MODEL_NAME,
     tools=[],
-    subagents=[planning_subagent, research_subagent, writer_subagent],
+    subagents=[planning_subagent, research_subagent, writer_subagent, asknews_subagent],
     checkpointer=checkpointer,
     interrupt_on={
         "search_opoint": {"allowed_decisions": ["approve", "edit", "reject"]},
@@ -120,69 +125,69 @@ def run_with_hitl(
     """
     # ############################################################
 
-    # _last_write_result.clear()
-    # # Auto-generate thread_id to prevent checkpointer state bleed across runs
-    # if thread_id is None:
-    #     thread_id = f"thread-{uuid.uuid4().hex[:8]}"
+    _last_write_result.clear()
+    # Auto-generate thread_id to prevent checkpointer state bleed across runs
+    if thread_id is None:
+        thread_id = f"thread-{uuid.uuid4().hex[:8]}"
 
-    # config = {"configurable": {"thread_id": thread_id}}
+    config = {"configurable": {"thread_id": thread_id}}
 
-    # logger.info("Invoking agent...")
-    # result = agent.invoke({"messages": [HumanMessage(content=task)]}, config=config)
-    # logger.info("Initial invocation complete.")
+    logger.info("Invoking agent...")
+    result = agent.invoke({"messages": [HumanMessage(content=task)]}, config=config)
+    logger.info("Initial invocation complete.")
 
-    # iteration = 0
-    # while True:
-    #     interrupts = result.get("__interrupt__", [])
-    #     if not interrupts:
-    #         logger.info("No pending interrupts — task complete.")
-    #         break
+    iteration = 0
+    while True:
+        interrupts = result.get("__interrupt__", [])
+        if not interrupts:
+            logger.info("No pending interrupts — task complete.")
+            break
 
-    #     iteration += 1
-    #     decisions: list[dict] = []
+        iteration += 1
+        decisions: list[dict] = []
 
-    #     for interrupt in interrupts:
-    #         # Defensive: handle unexpected interrupt shapes
-    #         if not isinstance(interrupt.value, dict):
-    #             logger.warning("Unexpected interrupt format: %s", interrupt.value)
-    #             continue
+        for interrupt in interrupts:
+            # Defensive: handle unexpected interrupt shapes
+            if not isinstance(interrupt.value, dict):
+                logger.warning("Unexpected interrupt format: %s", interrupt.value)
+                continue
 
-    #         action_requests = interrupt.value.get("action_requests", [])
-    #         if not action_requests:
-    #             logger.warning(
-    #                 "Interrupt contained no action_requests: %s", interrupt.value
-    #             )
-    #             continue
+            action_requests = interrupt.value.get("action_requests", [])
+            if not action_requests:
+                logger.warning(
+                    "Interrupt contained no action_requests: %s", interrupt.value
+                )
+                continue
 
-    #         logger.info(
-    #             "Iteration %d: %d action(s) pending.", iteration, len(action_requests)
-    #         )
+            logger.info(
+                "Iteration %d: %d action(s) pending.", iteration, len(action_requests)
+            )
 
-    #         for action_request in action_requests:
-    #             decision = _handle_action_request(action_request, auto_approve)
-    #             decisions.append(decision)
+            for action_request in action_requests:
+                decision = _handle_action_request(action_request, auto_approve)
+                decisions.append(decision)
 
-    #     if not decisions:
-    #         logger.warning("No decisions made — breaking to avoid infinite loop.")
-    #         break
+        if not decisions:
+            logger.warning("No decisions made — breaking to avoid infinite loop.")
+            break
 
-    #     logger.info("Resuming with %d decision(s)...", len(decisions))
-    #     result = agent.invoke(
-    #         Command(resume={"decisions": decisions}),
-    #         config=config,
-    #     )
-    #     logger.info("Resume complete.")
+        logger.info("Resuming with %d decision(s)...", len(decisions))
+        result = agent.invoke(
+            Command(resume={"decisions": decisions}),
+            config=config,
+        )
+        logger.info("Resume complete.")
 
-    # # ── Final output ──────────────────────────────────────────────────────────
-    # messages = result.get("messages", [])
-    # if messages:
-    #     logger.info("Final output: %s", messages[-1].content)
+    # ── Final output ──────────────────────────────────────────────────────────
+    messages = result.get("messages", [])
+    if messages:
+        logger.info("Final output: %s", messages[-1].content)
 
-    # json_path = _last_write_result.get("json_path")
-    # if json_path:
-    #     logger.info("Report written to: %s", json_path)
-    # else:
-    #     logger.warning("Writer agent did not return a json_path.")
+    json_path = _last_write_result.get("json_path")
+    if json_path:
+        logger.info("Report written to: %s", json_path)
+    else:
+        logger.warning("Writer agent did not return a json_path.")
 
     # ############################################################
     # sleep(10)
