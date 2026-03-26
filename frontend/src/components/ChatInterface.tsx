@@ -11,7 +11,8 @@ import { LoadingStages } from "@/components/LoadingStages";
 import { useCaseFiles, type CaseFile } from "@/contexts/CaseFilesContext";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { apiClient, API_BASE_URL } from "@/lib/api";
+import { apiClient } from "@/api/api";
+import { useInvestigation } from "@/hooks/useInvestigation";
 import type { ReportMetadata, GeolocationItem, ReportSource } from "@/types/index";
 import type { ReferenceItem } from "@/components/InvestigationReferences";
 import { MessageBubble } from "@/components/MessageBubble";
@@ -65,6 +66,11 @@ interface PendingReport {
   selectedAccount?: string;
 }
 
+function isRequestCancelled(err: unknown): boolean {
+  if (!axios.isAxiosError(err)) return false;
+  return err.code === "ERR_CANCELED";
+}
+
 function getInvestigationErrorMessage(err: unknown): string {
   if (axios.isAxiosError(err)) {
     const detail = err.response?.data?.detail;
@@ -89,29 +95,65 @@ function getInvestigationErrorMessage(err: unknown): string {
 export const ChatInterface = () => {
   const { user } = useAuth();
   const [isFocused, setIsFocused] = useState(false);
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [loadingStages, setLoadingStages] = useState<string[]>([]);
   const [attachmentByMessageId, setAttachmentByMessageId] = useState<Record<string, MessageAttachment>>({});
   const [pendingReports, setPendingReports] = useState<PendingReport[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const investigateAbortRef = useRef<AbortController | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const { addCaseFile } = useCaseFiles();
 
-  const performInvestigationApi = useCallback(async (query: string) => {
-    const reportMeta = await apiClient.investigate(query);
+  const performInvestigationApi = useCallback(async (query: string, signal?: AbortSignal) => {
+    const reportMeta = await apiClient.investigate.start(query, { signal });
     if (!reportMeta?.id) {
       throw new Error("Investigation returned no report ID");
     }
-    const report = await apiClient.getReport(reportMeta.id);
-    const meta = report as ReportMetadata;
-    return {
-      id: reportMeta.id,
-      name: reportMeta.name ?? reportMeta.id,
-      content: meta?.content ?? "",
-      geolocations: meta?.geolocations ?? [],
-      references: (meta?.sources ?? []) as ReferenceItem[],
-    };
+    console.log("ChatInterface: performInvestigationApi: reportMeta:", reportMeta);
+    setActiveTaskId(reportMeta.id);
+    // 2. Use Promise to wrap the WebSocket waiting process
+    return new Promise((resolve, reject) => {
+      console.log("Initiating WebSocket connection...");
+      
+      const socket = apiClient.investigate.connectStatus(reportMeta.id, async (data) => {
+        console.log("WS Message received:", data);
+        
+        if (data.status === "completed") {
+          socket.close();
+          try {
+            const report = await apiClient.investigate.getReport(data.report_id);
+            resolve({
+              id: reportMeta.id,
+              name: report.name || "Investigation Report",
+              content: report.content,
+              geolocations: report.geolocations,
+              references: report.sources,
+            });
+          } catch (err) {
+            reject(err);
+          }
+        }
+        
+        if (data.status === "error") {
+          socket.close();
+          reject(new Error(data.message || "Backend process error"));
+        }
+      });
+  
+      // Handle WebSocket connection failure
+      socket.onerror = (err) => {
+        console.error("WebSocket failed to connect:", err);
+        reject(new Error("Failed to establish real-time connection to investigation engine."));
+      };
+  
+      // Handle user cancellation
+      signal?.addEventListener("abort", () => {
+        socket.close();
+        reject(new Error("Investigation cancelled"));
+      });
+    });
   }, []);
 
   const transport = useCallback<NonNullable<UseChatOptions["transport"]>>(
@@ -159,7 +201,9 @@ export const ChatInterface = () => {
         }
 
 
-        const result = await performInvestigationApi(content);
+        investigateAbortRef.current?.abort();
+        investigateAbortRef.current = new AbortController();
+        const result = await performInvestigationApi(content, investigateAbortRef.current.signal);
         const id = createMessageId();
         const assistantMsg = {
           id,
@@ -202,6 +246,16 @@ export const ChatInterface = () => {
         toast.success("Investigation saved to case files");
         return [assistantMsg];
       } catch (err: unknown) {
+        if (isRequestCancelled(err)) {
+          const id = createMessageId();
+          return [
+            {
+              id,
+              role: "assistant" as const,
+              content: "Investigation cancelled.",
+            },
+          ];
+        }
         const message = getInvestigationErrorMessage(err);
         toast.error("Investigation failed: " + message);
         const id = createMessageId();
@@ -213,6 +267,8 @@ export const ChatInterface = () => {
           },
         ];
       } finally {
+        investigateAbortRef.current = null;
+        setActiveTaskId(null);
         setLoadingStages([]);
       }
     },
@@ -223,6 +279,22 @@ export const ChatInterface = () => {
   const { messages, status, error, sendMessage, clearError, reset } = chat;
   const [input, setInput] = useState("");
   const isLoading = status === "loading";
+
+  const handleCancelInvestigation = useCallback(async () => {
+  investigateAbortRef.current?.abort();
+
+  if (activeTaskId) {
+    try {
+      await apiClient.investigate.terminate(activeTaskId);
+      toast.success("Investigation process terminated.");
+    } catch (err) {
+      console.error("Backend termination failed:", err);
+    } finally {
+      setActiveTaskId(null);
+      setLoadingStages([]);
+    }
+  }
+}, [activeTaskId]);
 
   // Reset chat when navigating back to home
   useEffect(() => {
@@ -406,18 +478,54 @@ export const ChatInterface = () => {
                   "placeholder:text-muted-foreground/50 focus:outline-none max-h-40 overflow-y-auto"
                 )}
               />
-              <button
-                type="submit"
-                disabled={!input.trim() || isLoading}
-                className={cn(
-                  "absolute right-3 bottom-3 rounded-md p-1.5 transition-all duration-150",
-                  input.trim() && !isLoading
-                    ? "text-primary hover:bg-primary/10"
-                    : "text-muted-foreground/30 cursor-not-allowed"
-                )}
-              >
-                {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
-              </button>
+              {isLoading ? (
+                <button
+                  type="button"
+                  onClick={handleCancelInvestigation}
+                  className="absolute right-3 bottom-3 rounded-md p-1.5 text-destructive hover:bg-destructive/10 transition-all duration-150"
+                  aria-label="Cancel investigation"
+                  title="Cancel investigation"
+                >
+                  <span className="absolute bottom-full mb-2 hidden group-hover:block bg-destructive text-white text-[10px] px-2 py-1 rounded">
+                    Kill Process
+                  </span>
+                  
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M8.4 2.5h7.2l5.9 5.9v7.2l-5.9 5.9H8.4L2.5 15.6V8.4L8.4 2.5Z"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M8.5 12h7"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={!input.trim()}
+                  className={cn(
+                    "absolute right-3 bottom-3 rounded-md p-1.5 transition-all duration-150",
+                    input.trim()
+                      ? "text-primary hover:bg-primary/10"
+                      : "text-muted-foreground/30 cursor-not-allowed"
+                  )}
+                >
+                  <Send className="h-5 w-5" />
+                </button>
+              )}
             </div>
           </form>
           <div className="mt-6 w-full max-w-3xl mx-auto">
@@ -513,18 +621,50 @@ export const ChatInterface = () => {
                     "placeholder:text-muted-foreground/50 focus:outline-none max-h-40 overflow-y-auto"
                   )}
                 />
-                <button
-                  type="submit"
-                  disabled={!input.trim() || isLoading}
-                  className={cn(
-                    "absolute right-3 bottom-3 rounded-md p-1.5 transition-all duration-150",
-                    input.trim() && !isLoading
-                      ? "text-primary hover:bg-primary/10"
-                      : "text-muted-foreground/30 cursor-not-allowed"
-                  )}
-                >
-                  {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
-                </button>
+                {isLoading ? (
+                  <button
+                    type="button"
+                    onClick={handleCancelInvestigation}
+                    className="absolute right-3 bottom-3 rounded-md p-1.5 text-destructive hover:bg-destructive/10 transition-all duration-150"
+                    aria-label="Cancel investigation"
+                    title="Cancel investigation"
+                  >
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M8.4 2.5h7.2l5.9 5.9v7.2l-5.9 5.9H8.4L2.5 15.6V8.4L8.4 2.5Z"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M8.5 12h7"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={!input.trim()}
+                    className={cn(
+                      "absolute right-3 bottom-3 rounded-md p-1.5 transition-all duration-150",
+                      input.trim()
+                        ? "text-primary hover:bg-primary/10"
+                        : "text-muted-foreground/30 cursor-not-allowed"
+                    )}
+                  >
+                    <Send className="h-5 w-5" />
+                  </button>
+                )}
               </div>
               <p className="mt-2 text-xs text-muted-foreground px-4">
                 Press Enter to send, Shift+Enter for new line.

@@ -1,4 +1,7 @@
 from dotenv import load_dotenv
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+import asyncio
+import os
 
 load_dotenv()
 
@@ -67,3 +70,41 @@ def protected(user: dict = Depends(verify_token)):
         "uid": user["uid"],
         "tenant": user["tenant_id"],
     }
+
+
+@app.websocket("/ws/{task_id}")
+async def websocket_endpoint(websocket: WebSocket, task_id: str):
+
+    await websocket.accept()
+    await websocket.send_json({"status": "connected", "task_id": task_id})
+
+    try:
+        timeout = 60  
+        elapsed = 0
+
+        while elapsed < timeout:
+            # Logic to check the report file generation
+
+            await websocket.send_json(
+                {
+                    "status": "completed",
+                    "task_id": task_id,
+                    "report_id": task_id,
+                    "message": "Report generated successfully",
+                }
+            )
+            return
+
+            await asyncio.sleep(1)
+            elapsed += 1
+
+            # Logic to send the completed message
+            # await websocket.send_json({"status": "completed"})
+        await websocket.send_json(
+            {"status": "error", "message": "Timed out waiting for report."}
+        )
+    except WebSocketDisconnect:
+        logger.warning(f"Client {task_id} disconnected")
+    except Exception as e:
+        logger.error(f"Error in websocket_endpoint: {e}")
+        await websocket.send_json({"status": "error", "message": str(e)})

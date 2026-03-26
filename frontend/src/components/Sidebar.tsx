@@ -3,8 +3,8 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useSidebarContext } from "@/contexts/SidebarContext";
 import { useAuth } from "@/hooks/useAuth";
-import { apiClient } from "@/lib/api";
-import { useSignOut } from "@/hooks/useSignout";
+import { apiClient } from "@/api/api";
+import { useSignOut } from "@/hooks/useSignOut";
 
 const navigationItems = [
   { title: "Home", icon: Home, path: "/", resetChat: true },

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { userService } from "@/services/userService";
+import { userApi } from "@/api/userApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +15,6 @@ import {
   updateProfile,
 } from "firebase/auth";
 import { getTenantId } from "@/services/tenantService";
-import { apiClient } from "@/lib/api";
 import axios from "axios";
 
 
@@ -72,7 +71,7 @@ const Login = () => {
       freshAuth.tenantId = tenantId;
       const userCredential = await signInWithEmailAndPassword(freshAuth, email, password);
       console.log("User:", userCredential.user);
-      await userService.sendIdToken();
+      await userApi.sendIdToken();
       navigate("/", { replace: true });
       // useEffect will redirect when user is set
     } catch (err: unknown) {
@@ -99,7 +98,7 @@ const Login = () => {
       }
       console.log("Registering user with email:", email);
       console.log("Tenant ID:", tenantId);
-      const resp = await userService.registerUser(email, password, tenantId);
+      const resp = await userApi.registerUser(email, password, tenantId);
       if (resp.status !== 200) {
         setError(resp.data?.detail ?? "Registration failed.");
         return;
@@ -115,7 +114,7 @@ const Login = () => {
   
       console.log("Calling backend with ID Token:");
       
-      await userService.sendIdToken(); // send to the backend
+      await userApi.sendIdToken(); // send to the backend
       navigate("/", { replace: true });
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
