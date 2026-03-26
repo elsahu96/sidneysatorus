@@ -1,6 +1,9 @@
 # Build backend + frontend Docker images, push to Google Artifact Registry, then deploy to Cloud Run.
 # Auth: Workload Identity Federation (OIDC) — no JSON keys in GitHub secrets.
 #
+# Build cache: Docker Buildx + GitHub Actions cache (type=gha) speeds up repeat runs by reusing layers
+# (deps, base images). First run still cold; subsequent pushes with unchanged Dockerfile layers are faster.
+#
 # Required GitHub secrets:
 #   GCP_WORKLOAD_IDENTITY_PROVIDER — full resource name of the WIF provider
 #   GCP_SERVICE_ACCOUNT_EMAIL      — SA email (artifactregistry.writer, run.developer, and
@@ -44,10 +47,15 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      # Required so docker/build-push-action can read/write BuildKit cache (type=gha)
+      actions: write
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set image tag (12-char SHA)
+        run: echo "TAG=${GITHUB_SHA:0:12}" >> "$GITHUB_ENV"
 
       - name: Authenticate to Google Cloud
         id: auth
@@ -62,40 +70,54 @@ jobs:
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
-      - name: Build and push backend
-        run: |
-          set -euo pipefail
-          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${GAR_BACKEND}/${GAR_BACKEND_IMAGE}"
-          TAG="${GITHUB_SHA:0:12}"
-          docker build \
-            -t "${IMAGE}:${TAG}" \
-            -t "${IMAGE}:latest" \
-            -f backend/Dockerfile \
-            backend
-          docker push "${IMAGE}:${TAG}"
-          docker push "${IMAGE}:latest"
-          echo "BACKEND_IMAGE=${IMAGE}:${TAG}" >> "$GITHUB_ENV"
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Build and push frontend
+      # BuildKit cache stored in GitHub Actions cache; separate scopes so backend/frontend do not evict each other.
+      - name: Build and push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_BACKEND }}/${{ env.GAR_BACKEND_IMAGE }}:${{ env.TAG }}
+            ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_BACKEND }}/${{ env.GAR_BACKEND_IMAGE }}:latest
+          cache-from: type=gha,scope=backend-gar
+          cache-to: type=gha,mode=max,scope=backend-gar
+          provenance: false
+
+      - name: Record backend image for deploy
+        run: |
+          echo "BACKEND_IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/${GAR_BACKEND}/${GAR_BACKEND_IMAGE}:${TAG}" >> "$GITHUB_ENV"
+
+      - name: Check VITE_API_URL (required for frontend build)
         env:
           VITE_API_URL: ${{ vars.VITE_API_URL }}
         run: |
-          set -euo pipefail
           if [ -z "${VITE_API_URL:-}" ]; then
             echo "::error::Set repository variable VITE_API_URL (Settings → Secrets and variables → Actions → Variables) to your backend Cloud Run HTTPS URL."
             exit 1
           fi
-          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${GAR_FRONTEND}/${GAR_FRONTEND_IMAGE}"
-          TAG="${GITHUB_SHA:0:12}"
-          docker build \
-            --build-arg "VITE_API_URL=${VITE_API_URL}" \
-            -t "${IMAGE}:${TAG}" \
-            -t "${IMAGE}:latest" \
-            -f frontend/Dockerfile \
-            frontend
-          docker push "${IMAGE}:${TAG}"
-          docker push "${IMAGE}:latest"
-          echo "FRONTEND_IMAGE=${IMAGE}:${TAG}" >> "$GITHUB_ENV"
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          build-args: |
+            VITE_API_URL=${{ vars.VITE_API_URL }}
+          tags: |
+            ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_FRONTEND }}/${{ env.GAR_FRONTEND_IMAGE }}:${{ env.TAG }}
+            ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_FRONTEND }}/${{ env.GAR_FRONTEND_IMAGE }}:latest
+          cache-from: type=gha,scope=frontend-gar
+          cache-to: type=gha,mode=max,scope=frontend-gar
+          provenance: false
+
+      - name: Record frontend image for deploy
+        run: |
+          echo "FRONTEND_IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/${GAR_FRONTEND}/${GAR_FRONTEND_IMAGE}:${TAG}" >> "$GITHUB_ENV"
 
       # Point each Cloud Run service at the images built in this run (same 12-char SHA tag).
       - name: Deploy to Cloud Run
