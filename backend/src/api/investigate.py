@@ -1,16 +1,15 @@
-import asyncio
-import json
 import logging
-import os
-import pathlib
+import multiprocessing
+import uuid
+import asyncio
 from dotenv import load_dotenv
+
+from src.service import investigate_service
 
 load_dotenv()
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel
-from src.models.report import Report
-from datetime import datetime
 
 app = APIRouter()
 
@@ -21,74 +20,47 @@ class InvestigateRequest(BaseModel):
     query: str
 
 
-def _run_with_hitl(task: str, thread_id: str, auto_approve: bool):
-    """Import lazily so API startup doesn't fail on optional runtime deps."""
-    try:
-        from src.graph.flow import run_with_hitl
-    except ModuleNotFoundError as exc:
-        if exc.name == "deepagents":
-            logger.exception("Missing dependency 'deepagents' for investigation flow")
-            raise HTTPException(
-                status_code=503,
-                detail=(
-                    "Investigation service dependency is missing. "
-                    "Install backend dependencies and run with `uv run`."
-                ),
-            ) from exc
-        raise
+# Store the process handle for running tasks
+# Key: task_id, Value: Process Object
+running_tasks = {}
 
-    return run_with_hitl(task=task, thread_id=thread_id, auto_approve=auto_approve)
+
+def worker_wrapper(query: str, task_id: str):
+    """
+    A synchronous wrapper that runs in a subprocess.
+    It is responsible for starting a new event loop to run the asynchronous investigation logic.
+    """
+    try:
+        # Run the asynchronous investigation logic in a new event loop
+        asyncio.run(investigate_service.investigate(query))
+    except Exception as e:
+        logger.error(f"Task {task_id} failed: {e}")
 
 
 @app.post("/investigate")
 async def investigate(request: InvestigateRequest):
-    # return Report(
-    #     id="operation_epic_fury_report_20260313_023911",
-    #     name="Operation Epic Fury Report",
-    #     storage_path="/Users/elsahu/projects/sidneybysatorus-endeavour-main/reports/operation_epic_fury_report_20260313_023911.json",
-    #     mime_type="application/json",
-    #     created_at=datetime.now(),
-    # )
+    task_id = str(uuid.uuid4())
 
-    query = request.query
-    logger.info("POST /investigate query_len=%d", len(query or ""))
-
-    if not query or not query.strip():
-        logger.warning("POST /investigate: empty query rejected")
-        raise HTTPException(status_code=400, detail="Query cannot be empty")
-
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(
-        None,
-        lambda: _run_with_hitl(
-            task=query,
-            thread_id="investigation-workflow-1",
-            auto_approve=True,
-        ),
-    )
-
-    if not result:
-        logger.error("POST /investigate: writer agent produced no output files")
-        raise HTTPException(
-            status_code=500,
-            detail="Writer agent did not produce output files",
-        )
-
-    report_id = result.split("/")[-1].split(".")[0]
-    logger.info("POST /investigate: done report_id=%s path=%s", report_id, result)
-    return Report(
-        id=report_id,
-        name=report_id,
-        storage_path=result,
-        mime_type="text/markdown",
-        created_at=datetime.now(),
-    )
+    # Create a separate process to execute AI logic
+    p = multiprocessing.Process(target=worker_wrapper, args=(request.query, task_id))
+    p.start()
+    # Store the process handle
+    running_tasks[task_id] = p
+    logger.info("Investigate API Done: task_id=%s started", task_id)
+    return {"id": task_id, "status": "started"}
 
 
-if __name__ == "__main__":
-    result = _run_with_hitl(
-        task="What intelligence justified the pre-emptive strikes on Iran?",
-        thread_id="investigation-workflow-1",
-        auto_approve=False,
-    )
-    print(result)
+@app.post("/terminate/{task_id}")
+async def terminate_investigate(task_id: str):
+    p = running_tasks.get(task_id)
+
+    if p and p.is_alive():
+        # --- Force termination: kill the subprocess directly ---
+        p.terminate()
+        p.join()  # Clean up resources
+        del running_tasks[task_id]
+        return {
+            "message": f"Task {task_id} has been terminated and GPU/CPU resources freed."
+        }
+
+    return {"message": "Task not found or already finished."}
