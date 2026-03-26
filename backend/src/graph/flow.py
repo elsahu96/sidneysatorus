@@ -185,8 +185,9 @@ def run_with_hitl(
     #     logger.warning("Writer agent did not return a json_path.")
 
     # ############################################################
-    sleep(10)
-    json_path = "/Users/elsahu/projects/sidneybysatorus-endeavour-main/reports/report_20260320_115451.json"
+    # sleep(10)
+    # json_path = "/Users/elsahu/projects/sidneyb/ysatorus-endeavour-main/reports/report_20260320_115451.json"
+    logger.info("Graph flow: report written to: %s", json_path)
     return json_path
 
 

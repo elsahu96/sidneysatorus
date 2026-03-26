@@ -111,35 +111,50 @@ export const ChatInterface = () => {
     if (!reportMeta?.id) {
       throw new Error("Investigation returned no report ID");
     }
+    console.log("ChatInterface: performInvestigationApi: reportMeta:", reportMeta);
     setActiveTaskId(reportMeta.id);
     // 2. Use Promise to wrap the WebSocket waiting process
-  return new Promise((resolve, reject) => {
-    const socket = apiClient.investigate.connectStatus(reportMeta.id, async (data) => {
-      if (data.status === "completed") {
-        socket.close();
-        try {
-          // 3. After receiving the notification, fetch the final result
-          const reportMeta = await apiClient.investigate.getReport(data.report_id);
-          resolve({
-            id: reportMeta.id,
-            name: reportMeta.name,
-            content: reportMeta.content,
-            geolocations: reportMeta.geolocations,
-            references: reportMeta.sources,
-          });
-        } catch (err) {
-          reject(err);
+    return new Promise((resolve, reject) => {
+      console.log("Initiating WebSocket connection...");
+      
+      const socket = apiClient.investigate.connectStatus(reportMeta.id, async (data) => {
+        console.log("WS Message received:", data);
+        
+        if (data.status === "completed") {
+          socket.close();
+          try {
+            const report = await apiClient.investigate.getReport(data.report_id);
+            resolve({
+              id: reportMeta.id,
+              name: report.name || "Investigation Report",
+              content: report.content,
+              geolocations: report.geolocations,
+              references: report.sources,
+            });
+          } catch (err) {
+            reject(err);
+          }
         }
-      }
+        
+        if (data.status === "error") {
+          socket.close();
+          reject(new Error(data.message || "Backend process error"));
+        }
+      });
+  
+      // Handle WebSocket connection failure
+      socket.onerror = (err) => {
+        console.error("WebSocket failed to connect:", err);
+        reject(new Error("Failed to establish real-time connection to investigation engine."));
+      };
+  
+      // Handle user cancellation
+      signal?.addEventListener("abort", () => {
+        socket.close();
+        reject(new Error("Investigation cancelled"));
+      });
     });
-
-    // 处理用户中止
-    signal?.addEventListener("abort", () => {
-      socket.close();
-      reject(new Error("Investigation cancelled"));
-    });
-  });
-}, []);
+  }, []);
 
   const transport = useCallback<NonNullable<UseChatOptions["transport"]>>(
     async (input: ChatRunInput) => {

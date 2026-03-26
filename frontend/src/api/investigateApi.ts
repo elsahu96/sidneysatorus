@@ -16,25 +16,35 @@ export const investigateApi = {
     api.post(`/terminate/${taskId}`).then((r) => r.data),
 
   getReport: (reportId: string) =>
-    api.get<ReportMetadata>(`/reports/${reportId}`).then((r) => r.data),
+    api.get<ReportMetadata>(`/reports/${reportId}`).then((r) => {
+      console.log("InvestigateApi: getReport: r:", r);
+      return r.data;
+    }),
 
   getStatus: (taskId: string) =>
     api.get(`/status/${taskId}`).then((r) => r.data),
 
   connectStatus: (taskId: string, onMessage: (data: any) => void) => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    // 动态获取当前 Host (例如 localhost:4567)
+
     const host = window.location.host;
 
-    // 构造 URL。注意：如果你用 Vite 代理，路径前缀要和 vite.config.ts 对应
+    // Construct the URL. Note: if you use Vite proxy, the path prefix must match vite.config.ts
     const wsUrl = `${protocol}//${host}/ws/${taskId}`;
     console.log("Connecting to WS:", wsUrl);
 
     const socket = new WebSocket(wsUrl);
-    
+    socket.onopen = () => {
+      console.log("[WebSocket] Connection established for task:", taskId);
+    };
+
     socket.onmessage = (event) => {
+      console.log("[WebSocket] Raw data received:", event.data); 
       const data = JSON.parse(event.data);
       onMessage(data);
+    };
+    socket.onerror = (err) => {
+      console.error("[WebSocket] Error details:", err);
     };
 
     return socket;

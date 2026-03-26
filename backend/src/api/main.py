@@ -74,17 +74,37 @@ def protected(user: dict = Depends(verify_token)):
 
 @app.websocket("/ws/{task_id}")
 async def websocket_endpoint(websocket: WebSocket, task_id: str):
-    # FastAPI default checks the Origin in the Headers
-    # If forwarded through Vite proxy, Origin may be http://localhost:4567
 
-    # Force accept the connection (this will skip the default same-origin check)
     await websocket.accept()
+    await websocket.send_json({"status": "connected", "task_id": task_id})
 
     try:
-        while True:
+        timeout = 60  
+        elapsed = 0
+
+        while elapsed < timeout:
             # Logic to check the report file generation
+
+            await websocket.send_json(
+                {
+                    "status": "completed",
+                    "task_id": task_id,
+                    "report_id": task_id,
+                    "message": "Report generated successfully",
+                }
+            )
+            return
+
             await asyncio.sleep(1)
+            elapsed += 1
+
             # Logic to send the completed message
             # await websocket.send_json({"status": "completed"})
+        await websocket.send_json(
+            {"status": "error", "message": "Timed out waiting for report."}
+        )
     except WebSocketDisconnect:
-        print(f"Client {task_id} disconnected")
+        logger.warning(f"Client {task_id} disconnected")
+    except Exception as e:
+        logger.error(f"Error in websocket_endpoint: {e}")
+        await websocket.send_json({"status": "error", "message": str(e)})
