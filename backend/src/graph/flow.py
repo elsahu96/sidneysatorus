@@ -6,13 +6,17 @@ import uuid
 from dotenv import load_dotenv
 
 load_dotenv()
-from src.graph.tools.writer import _last_write_result  # 直接导入 side-channel
+from src.graph.tools.writer import _last_write_result  
 from deepagents.graph import create_deep_agent
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
 
-from src.graph.agents import planning_subagent, research_subagent, writer_subagent
+from src.graph.agents import (
+    planning_subagent,
+    research_subagent,
+    writer_subagent,
+)
 
 # ── Logging (replaces raw print for non-interactive output) ─────────────────
 logging.basicConfig(
@@ -32,14 +36,13 @@ agent = create_deep_agent(
     tools=[],
     subagents=[planning_subagent, research_subagent, writer_subagent],
     checkpointer=checkpointer,
-    interrupt_on={
-        "search_opoint": {"allowed_decisions": ["approve", "edit", "reject"]},
-    },
+    interrupt_on={},
     system_prompt=SystemMessage(
         content="""You are an orchestrator agent managing an investigation and writing pipeline.
-        For any investigation task:
-        1. Use the 'research-agent' subagent to research the topic and gather information.
-        2. Use the 'writer-agent' subagent to write a structured JSON report based on the findings.
+        For any investigation task, follow these steps in order:
+        1. Use the 'planning-agent' subagent to plan the investigation and produce a list of search queries.
+        2. Use the 'research-agent' subagent to search AskNews with those queries and gather articles.
+        3. Use the 'writer-agent' subagent to write a structured JSON report based on the findings.
         The writer-agent will return a json_path. Include that path in your final message."""
     ),
 )
