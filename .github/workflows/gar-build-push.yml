@@ -12,7 +12,7 @@
 #                                  serviceAccountUser on Cloud Run runtime SAs — see GITHUB_ACTIONS_GCP.md)
 #
 # Required GitHub Variables (Settings → Secrets and variables → Actions → Variables):
-#   VITE_API_URL — public backend base URL for the SPA (e.g. https://ai-sidney-backend-staging-xxxx.run.app)
+#   VITE_API_URL — public backend base URL for the SPA (e.g. https://ai-sidney-backend-staging-xx.run.app)
 #
 # Optional Variables (defaults match Terraform staging: app_name ai_sidney, environment staging):
 #   CLOUD_RUN_BACKEND_SERVICE  — e.g. ai-sidney-backend-staging
