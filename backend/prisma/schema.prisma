@@ -34,7 +34,7 @@ model Message {
 
 model User {
   id             String   @id @default(cuid())
-  supabaseId     String?  @unique @map("supabase_id")  // Firebase UID (JWT sub)
+  firebaseUid    String?  @unique @map("firebase_uid")  // Firebase UID (JWT sub)
   email          String
   name           String?
   username       String?
