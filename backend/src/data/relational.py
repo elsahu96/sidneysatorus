@@ -20,7 +20,7 @@ class RelationalDB:
             await self._client.connect()
             self._connected = True
             logger.info("RelationalDB connected")
-
+    
     async def disconnect(self) -> None:
         if self._connected:
             await self._client.disconnect()
@@ -29,7 +29,17 @@ class RelationalDB:
 
     @property
     def client(self) -> Prisma:
-        """Direct access to the Prisma client for model queries."""
+        """Direct access to the Prisma client. Raises if not connected."""
         if not self._connected:
             raise RuntimeError("RelationalDB is not connected. Call connect() first.")
+        return self._client
+
+    async def get_client(self) -> Prisma:
+        """Return the Prisma client, connecting lazily if needed."""
+        if not self._connected:
+            try:
+                await self.connect()
+            except Exception:
+                self._connected = False
+                raise
         return self._client

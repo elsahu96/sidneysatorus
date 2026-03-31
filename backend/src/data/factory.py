@@ -49,19 +49,37 @@ class DataFactory:
     # ── Lifecycle ────────────────────────────────────────────────────────────
 
     async def connect(self) -> None:
-        """Connect all data store clients. Called at application startup."""
-        await self._relational.connect()
-        await self._vector.connect()
-        await self._search.connect()
-        await self._cache.connect()
-        logger.info("DataFactory: all clients connected")
+        """Connect all data store clients. Called at application startup.
+
+        Connection failures are logged as warnings so the server can still
+        start in environments where not all services are running (e.g. local dev
+        without Cloud SQL Auth Proxy). Routes that depend on an unavailable
+        client will raise RuntimeError on first access.
+        """
+        for name, client in [
+            ("relational", self._relational),
+            ("vector", self._vector),
+            ("search", self._search),
+            ("cache", self._cache),
+        ]:
+            try:
+                await client.connect()
+                logger.info("DataFactory: %s connected", name)
+            except Exception as exc:
+                logger.warning("DataFactory: %s connection failed — %s", name, exc)
 
     async def disconnect(self) -> None:
         """Disconnect all clients gracefully. Called at application shutdown."""
-        await self._relational.disconnect()
-        await self._vector.disconnect()
-        await self._search.disconnect()
-        await self._cache.disconnect()
+        for name, client in [
+            ("relational", self._relational),
+            ("vector", self._vector),
+            ("search", self._search),
+            ("cache", self._cache),
+        ]:
+            try:
+                await client.disconnect()
+            except Exception as exc:
+                logger.warning("DataFactory: %s disconnect error — %s", name, exc)
         logger.info("DataFactory: all clients disconnected")
 
     # ── Accessors ────────────────────────────────────────────────────────────

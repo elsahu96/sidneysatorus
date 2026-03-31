@@ -11,20 +11,26 @@ import type {
   ProjectDocument,
 } from "@/contexts/CaseFilesContext";
 
+// Backend returns Prisma model_dump() with camelCase keys and createdAt as ISO string.
+// The frontend CaseFile interface uses `timestamp: number` (Unix ms).
+const isoToMs = (iso?: string | null): number =>
+  iso ? new Date(iso).getTime() : Date.now();
+
 const toCaseFile = (raw: {
   id: string;
-  caseNumber: string;
+  caseNumber?: string | null;
   subject: string;
-  timestamp: number;
+  createdAt?: string | null;
+  timestamp?: number | null;
   folderId?: string | null;
   category?: string | null;
   projectId?: string | null;
   messages: Array<Record<string, unknown>>;
 }): CaseFile => ({
   id: raw.id,
-  caseNumber: raw.caseNumber,
+  caseNumber: raw.caseNumber ?? raw.id,
   subject: raw.subject,
-  timestamp: raw.timestamp,
+  timestamp: raw.timestamp ?? isoToMs(raw.createdAt),
   folderId: raw.folderId ?? undefined,
   category: (raw.category as CaseFile["category"]) ?? undefined,
   projectId: raw.projectId ?? undefined,
@@ -34,12 +40,13 @@ const toCaseFile = (raw: {
 const toFolder = (raw: {
   id: string;
   name: string;
-  timestamp: number;
+  createdAt?: string | null;
+  timestamp?: number | null;
   color?: string | null;
 }): Folder => ({
   id: raw.id,
   name: raw.name,
-  timestamp: raw.timestamp,
+  timestamp: raw.timestamp ?? isoToMs(raw.createdAt),
   color: raw.color ?? undefined,
 });
 
@@ -47,14 +54,16 @@ const toProject = (raw: {
   id: string;
   name: string;
   description?: string | null;
-  timestamp: number;
-  documents: Array<{
+  createdAt?: string | null;
+  timestamp?: number | null;
+  documents?: Array<{
     id: string;
     name: string;
     size: number;
     type: string;
-    uploadedAt: number;
-    url: string;
+    uploadedAt?: number | null;
+    storageKey?: string | null;
+    url?: string | null;
   }>;
   reports?: CaseFile[];
   chatHistory?: Array<{ role: "user" | "assistant"; content: string }>;
@@ -62,14 +71,14 @@ const toProject = (raw: {
   id: raw.id,
   name: raw.name,
   description: raw.description ?? undefined,
-  timestamp: raw.timestamp,
+  timestamp: raw.timestamp ?? isoToMs(raw.createdAt),
   documents: (raw.documents || []).map((d) => ({
     id: d.id,
     name: d.name,
     size: d.size,
     type: d.type,
-    uploadedAt: d.uploadedAt,
-    url: d.url,
+    uploadedAt: d.uploadedAt ?? Date.now(),
+    url: d.url ?? d.storageKey ?? "",
   })),
   reports: raw.reports || [],
   chatHistory: raw.chatHistory || [],

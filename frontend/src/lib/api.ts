@@ -7,11 +7,21 @@ export const API_BASE_URL =
 
 // Create axios instance
 const api = axios.create({
-  baseURL: "/",
+  baseURL: "/api",
   headers: {
     "Content-Type": "application/json",
   },
-  withCredentials: true, // Important for cookies/sessions
+  withCredentials: true,
+});
+
+// Attach Firebase ID token to every request
+api.interceptors.request.use(async (config) => {
+  const user = auth.currentUser;
+  if (user) {
+    const token = await user.getIdToken();
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
 });
 
 export const apiClient = {
@@ -23,12 +33,16 @@ export const apiClient = {
   //   return api.put<{ user: User }>(`/user/profile/${id}`, data);
   // },
   /** Query the agent with a natural language question */
-  investigate: (req: string) => {
-    console.log("[investigate] req:", req);
+  investigate: (req: string, threadId: string) => {
+    console.log("[investigate] req:", req, "thread:", threadId);
     return api
-      .post<ReportMetadata>("/investigate", { query: req })
+      .post<ReportMetadata>("/investigate", { query: req, thread_id: threadId })
       .then((r) => r.data);
   },
+
+  /** Cancel a running investigation by thread ID */
+  cancelInvestigation: (threadId: string) =>
+    api.delete(`/investigate/${threadId}`).catch(() => {}), // best-effort
 
   /** Get a report by its filename stem */
   getReport: (report_id: string) => {
@@ -39,7 +53,7 @@ export const apiClient = {
   // ── Case Files ────────────────────────────────────────────────────────────
 
   fetchCaseFiles: (): Promise<{ caseFiles: unknown[] }> =>
-    Promise.resolve({ caseFiles: [] }),
+    api.get<{ cases: unknown[] }>("/cases/").then((r) => ({ caseFiles: r.data.cases })),
 
   createCaseFile: (payload: {
     caseNumber: string;
@@ -49,16 +63,13 @@ export const apiClient = {
     projectId?: string | null;
     messages: unknown[];
   }): Promise<unknown> =>
-    Promise.resolve({
-      id: crypto.randomUUID(),
-      caseNumber: payload.caseNumber,
+    api.post("/cases/", {
       subject: payload.subject,
-      timestamp: Date.now(),
-      folderId: payload.folderId ?? null,
-      category: payload.category ?? null,
-      projectId: payload.projectId ?? null,
       messages: payload.messages,
-    }),
+      folder_id: payload.folderId ?? null,
+      category: payload.category ?? null,
+      project_id: payload.projectId ?? null,
+    }).then((r) => r.data),
 
   updateCaseFile: (
     id: string,
@@ -71,81 +82,56 @@ export const apiClient = {
       messages?: unknown[];
     },
   ): Promise<unknown> =>
-    Promise.resolve({
-      id,
-      caseNumber: payload.caseNumber ?? "",
-      subject: payload.subject ?? "",
-      timestamp: Date.now(),
-      folderId: payload.folderId ?? null,
-      category: payload.category ?? null,
-      projectId: payload.projectId ?? null,
-      messages: payload.messages ?? [],
-    }),
+    api.patch(`/cases/${id}`, {
+      subject: payload.subject,
+      case_number: payload.caseNumber,
+      folder_id: payload.folderId,
+      category: payload.category,
+      project_id: payload.projectId,
+      messages: payload.messages,
+    }).then((r) => r.data),
 
-  deleteCaseFile: (_id: string): Promise<void> => Promise.resolve(),
+  deleteCaseFile: (id: string): Promise<void> =>
+    api.delete(`/cases/${id}`).then(() => {}),
 
   // ── Folders ───────────────────────────────────────────────────────────────
 
   fetchFolders: (): Promise<{ folders: unknown[] }> =>
-    Promise.resolve({ folders: [] }),
+    api.get<{ folders: unknown[] }>("/folders").then((r) => r.data),
 
   createFolder: (name: string, color?: string): Promise<unknown> =>
-    Promise.resolve({
-      id: crypto.randomUUID(),
-      name,
-      timestamp: Date.now(),
-      color: color ?? null,
-    }),
+    api.post("/folders", { name, color: color ?? null }).then((r) => r.data),
 
   updateFolder: (
     id: string,
     payload: { name?: string; color?: string },
   ): Promise<unknown> =>
-    Promise.resolve({
-      id,
-      name: payload.name ?? "",
-      timestamp: Date.now(),
-      color: payload.color ?? null,
-    }),
+    api.patch(`/folders/${id}`, { name: payload.name, color: payload.color }).then((r) => r.data),
 
-  deleteFolder: (_id: string): Promise<void> => Promise.resolve(),
+  deleteFolder: (id: string): Promise<void> =>
+    api.delete(`/folders/${id}`).then(() => {}),
 
   // ── Projects ──────────────────────────────────────────────────────────────
 
   fetchProjects: (): Promise<{ projects: unknown[] }> =>
-    Promise.resolve({ projects: [] }),
+    api.get<{ projects: unknown[] }>("/projects").then((r) => r.data),
 
   createProject: (name: string, description?: string): Promise<unknown> =>
-    Promise.resolve({
-      id: crypto.randomUUID(),
-      name,
-      description: description ?? null,
-      timestamp: Date.now(),
-      documents: [],
-      reports: [],
-      chatHistory: [],
-    }),
+    api.post("/projects", { name, description: description ?? null }).then((r) => r.data),
 
   updateProject: (
     id: string,
     payload: { name?: string; description?: string },
   ): Promise<unknown> =>
-    Promise.resolve({
-      id,
-      name: payload.name ?? "",
-      description: payload.description ?? null,
-      timestamp: Date.now(),
-      documents: [],
-      reports: [],
-      chatHistory: [],
-    }),
+    api.patch(`/projects/${id}`, { name: payload.name, description: payload.description }).then((r) => r.data),
 
-  deleteProject: (_id: string): Promise<void> => Promise.resolve(),
+  deleteProject: (id: string): Promise<void> =>
+    api.delete(`/projects/${id}`).then(() => {}),
 
   // ── Project Documents ─────────────────────────────────────────────────────
 
   uploadProjectDocument: (
-    _projectId: string,
+    projectId: string,
     file: File,
   ): Promise<{
     id: string;
@@ -154,20 +140,23 @@ export const apiClient = {
     type: string;
     uploadedAt: number;
     url: string;
-  }> =>
-    Promise.resolve({
-      id: crypto.randomUUID(),
-      name: file.name,
-      size: file.size,
-      type: file.type,
-      uploadedAt: Date.now(),
-      url: "",
-    }),
+  }> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api
+      .post<{ id: string; name: string; size: number; type: string; uploadedAt: number; url: string }>(
+        `/projects/${projectId}/documents/upload`,
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } },
+      )
+      .then((r) => r.data);
+  },
 
   removeProjectDocument: (
-    _projectId: string,
-    _documentId: string,
-  ): Promise<void> => Promise.resolve(),
+    projectId: string,
+    documentId: string,
+  ): Promise<void> =>
+    api.delete(`/projects/${projectId}/documents/${documentId}`).then(() => {}),
 };
 
 /** WebSocket connection for live graph updates */

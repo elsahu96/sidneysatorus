@@ -5,9 +5,10 @@ load_dotenv()
 import os
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from src.api import investigate, report, user
+from fastapi.responses import JSONResponse
+from src.api import investigate, report, user, cases, workspace
 from src.service.auth import verify_token
 from src.data import init_data_factory, shutdown_data_factory
 import firebase_admin
@@ -30,6 +31,19 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Sidney Backend API", version="1.0.0", lifespan=lifespan)
 
+
+@app.exception_handler(Exception)
+async def prisma_engine_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    from prisma.engine.errors import EngineConnectionError
+    if isinstance(exc, EngineConnectionError):
+        logger.error("Database unavailable: %s", exc)
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Database unavailable. Check that the Cloud SQL Auth Proxy is running."},
+        )
+    raise exc
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[_FRONTEND_URL],
@@ -41,6 +55,8 @@ app.add_middleware(
 app.include_router(investigate.app, tags=["investigate"])
 app.include_router(report.app, tags=["reports"])
 app.include_router(user.app, tags=["user"])
+app.include_router(cases.app)
+app.include_router(workspace.app)
 
 
 @app.get("/")

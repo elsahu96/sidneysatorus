@@ -15,7 +15,8 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Calendar, ChevronDown, ChevronUp, MessageCircle, Send, X, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useRef, useEffect } from "react";
-import { exportReportToPDF } from "@/lib/pdfExport";
+import { exportReportToPDF, exportReportMetadataToPDF } from "@/lib/pdfExport";
+import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
 
 const CaseDetail = () => {
@@ -32,6 +33,7 @@ const CaseDetail = () => {
   } = useSidebarContext();
   const caseFile = id ? getCaseFile(id) : undefined;
   const project = caseFile?.projectId ? getProject(caseFile.projectId) : undefined;
+  const [exportingPdf, setExportingPdf] = useState(false);
   const [showChatHistory, setShowChatHistory] = useState(false);
   const [showChatPanel, setShowChatPanel] = useState(false);
   const [chatInput, setChatInput] = useState("");
@@ -159,17 +161,31 @@ const CaseDetail = () => {
                     </div>}
                 </div>
                 <div className="flex gap-2">
-                  <Button 
-                    onClick={() => {
-                      exportReportToPDF(caseFile);
-                      toast.success("Report exported to PDF");
-                    }} 
-                    size="sm" 
-                    variant="outline" 
+                  <Button
+                    disabled={exportingPdf}
+                    onClick={async () => {
+                      if (finalReport?.isReport) {
+                        setExportingPdf(true);
+                        try {
+                          const report = await apiClient.getReport(caseFile.caseNumber);
+                          exportReportMetadataToPDF(report);
+                          toast.success("Report exported to PDF");
+                        } catch {
+                          toast.error("Failed to fetch report for export");
+                        } finally {
+                          setExportingPdf(false);
+                        }
+                      } else {
+                        exportReportToPDF(caseFile);
+                        toast.success("Report exported to PDF");
+                      }
+                    }}
+                    size="sm"
+                    variant="outline"
                     className="gap-2"
                   >
                     <Download className="h-4 w-4" />
-                    Export PDF
+                    {exportingPdf ? "Exporting…" : "Export PDF"}
                   </Button>
                   <Button onClick={() => setShowChatPanel(!showChatPanel)} size="sm" className="gap-2 bg-primary hover:bg-primary/90">
                     <MessageCircle className="h-4 w-4" />

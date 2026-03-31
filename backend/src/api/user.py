@@ -1,8 +1,4 @@
-import asyncio
-import json
 import logging
-import os
-import pathlib
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from pydantic import EmailStr
@@ -14,8 +10,9 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 import firebase_admin
 from firebase_admin import tenant_mgt
 from firebase_admin import credentials, auth as admin_auth
-from fastapi import APIRouter, HTTPException, Depends
 from src.service.auth import verify_token
+from src.deps import get_data_factory, DataFactory
+from src.service.db import create_or_get_user, create_team_with_owner, get_teams_for_user
 from firebase_admin._auth_utils import EmailAlreadyExistsError
 
 app = APIRouter(prefix="/user")
@@ -30,10 +27,8 @@ class RegisterRequest(BaseModel):
     tenantId: str
 
 
-def register_user(email: str, password: str, tenant_id: str):
-    # 用 tenant_id 创建 tenant 专属的 auth client
+def _create_firebase_user(email: str, password: str, tenant_id: str) -> str:
     tenant_client = tenant_mgt.auth_for_tenant(tenant_id)
-
     user = tenant_client.create_user(
         email=email,
         password=password,
@@ -44,16 +39,14 @@ def register_user(email: str, password: str, tenant_id: str):
 
 @app.post("/register")
 @limiter.limit("5/minute")
-def register(request: Request, body: RegisterRequest):
-    logger.info("Registering user with email: %s", body.email)
-    logger.info("Tenant ID: %s", body.tenantId)
+async def register(
+    request: Request,
+    body: RegisterRequest,
+    factory: DataFactory = Depends(get_data_factory),
+):
+    logger.info("Registering user email=%s tenant=%s", body.email, body.tenantId)
     try:
-        uid = register_user(
-            email=body.email,
-            password=body.password,
-            tenant_id=body.tenantId,
-        )
-        return {"uid": uid, "message": "User registered successfully"}
+        uid = _create_firebase_user(body.email, body.password, body.tenantId)
     except EmailAlreadyExistsError:
         raise HTTPException(
             status_code=400, detail="An account with this email already exists."
@@ -61,20 +54,37 @@ def register(request: Request, body: RegisterRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+    db = factory.relational.client
+    user = await create_or_get_user(db, firebase_uid=uid, email=body.email)
+    team = await create_team_with_owner(db, team_name=f"{body.email}'s Team", owner_id=user["id"])
+
+    return {"uid": uid, "user_id": user["id"], "team_id": team["id"], "message": "User registered successfully"}
+
 
 @app.get("/profile")
-def get_profile(user=Depends(verify_token)):
+async def get_profile(
+    user=Depends(verify_token),
+    factory: DataFactory = Depends(get_data_factory),
+):
     logger.info("Getting profile for user: %s", user["uid"])
+    db = factory.relational.client
+    db_user = await create_or_get_user(db, firebase_uid=user["uid"], email=user["email"])
+    teams = await get_teams_for_user(db, db_user["id"])
     return {
         "uid": user["uid"],
+        "user_id": db_user["id"],
         "email": user["email"],
         "tenant": user["tenant_name"],
-        "message": f"Welcome, {user['email']}!",
+        "teams": teams,
     }
 
 
-@app.get("/data")
-def get_data(user=Depends(verify_token)):
-    logger.info("Getting data for user: %s", user["uid"])
-    tenant = user["tenant_id"]
-    return {"tenant": tenant, "data": []}
+@app.get("/teams")
+async def get_teams(
+    user=Depends(verify_token),
+    factory: DataFactory = Depends(get_data_factory),
+):
+    db = factory.relational.client
+    db_user = await create_or_get_user(db, firebase_uid=user["uid"], email=user["email"])
+    teams = await get_teams_for_user(db, db_user["id"])
+    return {"teams": teams}

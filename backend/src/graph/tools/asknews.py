@@ -12,6 +12,15 @@ ASKNEWS_API_KEY = os.getenv("ASKNEWS_API_KEY")
 _client = AskNewsSDK(api_key=ASKNEWS_API_KEY)
 
 
+def _to_unix(pub_date) -> int:
+    """Convert pub_date to a unix timestamp int, handling datetime objects and raw ints."""
+    if pub_date is None:
+        return 0
+    if isinstance(pub_date, (int, float)):
+        return int(pub_date)
+    return int(pub_date.timestamp())
+
+
 class Article(TypedDict):
     id_article: int
     id_site: int
@@ -59,7 +68,7 @@ def search_asknews(
                 summary=getattr(article, "summary", "") or "",
                 content=getattr(article, "article_content", "") or getattr(article, "body", "") or "",
                 url=getattr(article, "article_url", "") or "",
-                unix_timestamp=int(getattr(article, "pub_date", None).timestamp() if getattr(article, "pub_date", None) else 0),
+                unix_timestamp=_to_unix(getattr(article, "pub_date", None)),
                 language=getattr(article, "language", "") or "",
                 countrycode=getattr(article, "country", "") or "",
                 site_rank_global=getattr(article, "rank_score", 0) or 0,

@@ -60,7 +60,7 @@ Distinguish confirmed facts from inferences throughout your analysis.
 
 ### Step 2 — Compose each report section as markdown text
 
-**report_summary** (5–7 sentences)
+**report_summary** (5-7 sentences)
 Key findings, main conclusions, and critical evidence. Note any major data gaps.
 
 **report_detailed_analysis**
@@ -79,7 +79,7 @@ For each significant location in the report, provide:
   - entity: full name of the place or organisation
   - coordinates: [latitude, longitude] as decimals
   - type: one of "incident" | "hq" | "registration" | "residence" | "border" | "other"
-  - context: 1–2 sentences on why this location matters
+  - context: 1-2 sentences on why this location matters
 Only include locations you can confidently geocode. Omit uncertain ones entirely
 rather than guessing — incorrect coordinates will mislead the map render.
 
@@ -94,7 +94,9 @@ containing both the formatted report content and all metadata for frontend rende
 Your final output should be only the json_path returned by the tool.
 
 ## RULES
+- All the subtitles should not contain "_" in them. Words in subtitles should be separated by a space.
 - Do not fabricate facts or coordinates. State gaps clearly.
+- DO not fabricate sources. If a source is not found, state that clearly.
 - Call `write_report` exactly once.
 - CRITICAL — citation integrity: before calling `write_report`, verify that every
   inline citation [N] used anywhere in report_detailed_analysis has a corresponding
@@ -102,4 +104,3 @@ Your final output should be only the json_path returned by the tool.
   contain exactly 14 entries. Never reference a citation number that exceeds the
   length of your sources list. Remove or renumber any citation that has no source.
 """
-

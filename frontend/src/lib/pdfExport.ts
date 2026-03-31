@@ -1,5 +1,112 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import type { ReportMetadata } from "@/types/index";
+
+export const exportReportMetadataToPDF = (report: ReportMetadata): void => {
+  const doc = new jsPDF();
+  const margin = 15;
+  const maxWidth = doc.internal.pageSize.getWidth() - margin * 2;
+  let y = margin;
+
+  const newline = (pts = 5) => { y += pts; };
+  const pageBreakIfNeeded = (needed = 20) => {
+    if (y + needed > doc.internal.pageSize.getHeight() - margin) {
+      doc.addPage();
+      y = margin;
+    }
+  };
+
+  // ── Title ─────────────────────────────────────────────────────────────────
+  doc.setFontSize(20);
+  doc.setFont("helvetica", "bold");
+  const titleLines = doc.splitTextToSize(report.name || "Investigation Report", maxWidth);
+  doc.text(titleLines, margin, y);
+  y += titleLines.length * 8 + 4;
+
+  // ── Metadata line ─────────────────────────────────────────────────────────
+  if (report.created_at) {
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(120, 120, 120);
+    const dateStr = new Date(report.created_at).toLocaleDateString("en-GB", {
+      day: "numeric", month: "long", year: "numeric",
+    });
+    doc.text(`Generated: ${dateStr}`, margin, y);
+    doc.setTextColor(0, 0, 0);
+    y += 6;
+  }
+
+  // Divider
+  doc.setDrawColor(200, 200, 200);
+  doc.line(margin, y, margin + maxWidth, y);
+  y += 8;
+
+  // ── Content sections ──────────────────────────────────────────────────────
+  if (report.content) {
+    const sections = report.content.split(/\n(?=## )/);
+    for (const section of sections) {
+      const firstNewline = section.indexOf("\n");
+      const heading = firstNewline === -1 ? section : section.slice(0, firstNewline);
+      const body = firstNewline === -1 ? "" : section.slice(firstNewline + 1).trim();
+
+      pageBreakIfNeeded(30);
+
+      // Section heading
+      const headingText = heading.replace(/^##\s*/, "");
+      doc.setFontSize(13);
+      doc.setFont("helvetica", "bold");
+      doc.text(headingText, margin, y);
+      y += 7;
+
+      // Section body
+      if (body) {
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        // Handle bullet list lines
+        const lines = body.split("\n");
+        for (const line of lines) {
+          pageBreakIfNeeded(10);
+          const isBullet = /^[-*]\s/.test(line);
+          const text = isBullet ? `• ${line.replace(/^[-*]\s/, "")}` : line;
+          if (!text.trim()) { newline(3); continue; }
+          const wrapped = doc.splitTextToSize(text, isBullet ? maxWidth - 4 : maxWidth);
+          doc.text(wrapped, isBullet ? margin + 4 : margin, y);
+          y += wrapped.length * 5 + 1;
+        }
+      }
+      newline(6);
+    }
+  }
+
+  // ── Sources table ─────────────────────────────────────────────────────────
+  if (report.sources && report.sources.length > 0) {
+    pageBreakIfNeeded(40);
+    doc.setFontSize(13);
+    doc.setFont("helvetica", "bold");
+    doc.text("Sources", margin, y);
+    y += 6;
+
+    autoTable(doc, {
+      startY: y,
+      head: [["#", "Title", "Date", "Key Insight"]],
+      body: report.sources.map((s, i) => [
+        String(i + 1),
+        s.title || "",
+        s.date || "",
+        s.key_insight || "",
+      ]),
+      styles: { fontSize: 8, cellPadding: 3 },
+      headStyles: { fillColor: [40, 40, 40] },
+      columnStyles: { 0: { cellWidth: 8 }, 2: { cellWidth: 22 } },
+      margin: { left: margin, right: margin },
+    });
+    // @ts-ignore
+    y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
+  }
+
+  const filename = `${(report.name || report.id || "report").replace(/[^a-z0-9]/gi, "_")}.pdf`;
+  doc.save(filename);
+};
 
 interface CaseFile {
   id: string;
