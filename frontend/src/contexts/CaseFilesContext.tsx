@@ -152,18 +152,14 @@ export const CaseFilesProvider = ({ children }: { children: ReactNode }) => {
     return defaultProjects;
   });
 
-  // Backend sync disabled: use local state only (no GET /api/case-files, /api/folders, /api/projects)
+  // Fetch case files, folders, and projects from the PostgreSQL backend on auth.
   useEffect(() => {
-    if (authLoading || !user || !localStorage.getItem("idToken")) return;
-    const token = localStorage.getItem("idToken");
-    // Skip backend fetch; data stays in localStorage / initial state. Set USE_CASE_FILES_BACKEND = true to re-enable.
-    const USE_CASE_FILES_BACKEND = false;
-    if (!USE_CASE_FILES_BACKEND) return;
+    if (authLoading || !user) return;
     let cancelled = false;
     Promise.all([
-      caseFilesApi.fetchCaseFiles(token),
-      caseFilesApi.fetchFolders(token),
-      caseFilesApi.fetchProjects(token),
+      caseFilesApi.fetchCaseFiles(),
+      caseFilesApi.fetchFolders(),
+      caseFilesApi.fetchProjects(),
     ])
       .then(([files, folderList, projectList]) => {
         if (!cancelled) {
@@ -177,7 +173,7 @@ export const CaseFilesProvider = ({ children }: { children: ReactNode }) => {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, user, localStorage.getItem("idToken")]);
+  }, [authLoading, user]);
 
   useEffect(() => {
     if (!backendSynced.current) {

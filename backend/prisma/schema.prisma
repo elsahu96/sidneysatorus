@@ -1,8 +1,5 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// Prisma schema — PostgreSQL on GCP Cloud SQL
+// Docs: https://pris.ly/d/prisma-schema
 
 generator client {
   provider             = "prisma-client-py"
@@ -37,11 +34,11 @@ model Message {
 
 model User {
   id             String   @id @default(cuid())
-  supabaseId     String?  @unique @map("supabase_id")  // Supabase auth.users id (JWT sub)
+  firebaseUid    String?  @unique @map("firebase_uid")  // Firebase UID (JWT sub)
   email          String
   name           String?
   username       String?
-  phash          String?  @db.VarChar(255)            // Legacy; unused when supabaseId is set
+  phash          String?  @db.VarChar(255)
   subscriptionId String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

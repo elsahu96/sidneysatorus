@@ -5,9 +5,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from backend.src.graph.tools.asknews import search_asknews
+from src.graph.tools.asknews import search_asknews
 from src.graph.tools.writer import write_report
-from src.graph.tools.opoint import search_opoint
 
 from src.graph.prompts.prompts import (
     PLANNING_AGENT_PROMPT,
@@ -31,10 +30,9 @@ research_subagent = SubAgent(
     name="research-agent",
     description="Searches the web and gathers information on a topic in depth",
     system_prompt=RESEARCH_AGENT_PROMPT,
-    tools=[search_opoint],
+    tools=[search_asknews],
     model="google_genai:gemini-3-flash-preview",
 )
-
 
 writer_subagent = SubAgent(
     name="writer-agent",
