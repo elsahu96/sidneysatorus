@@ -23,8 +23,8 @@ export const userApi = {
       },
     });
 
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
+    if (res.status < 200 || res.status >= 300) {
+      const data = res.data ?? {};
       throw new Error(data.detail ?? `Auth failed: ${res.status}`);
     }
     return res;

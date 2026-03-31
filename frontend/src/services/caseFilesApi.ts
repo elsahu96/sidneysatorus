@@ -84,24 +84,22 @@ const toProject = (raw: {
   chatHistory: raw.chatHistory || [],
 });
 
-export async function fetchCaseFiles(
-  _accessToken?: string,
-): Promise<CaseFile[]> {
-  const data = await apiClient.fetchCaseFiles();
+export async function fetchCaseFiles(): Promise<CaseFile[]> {
+  const data = await apiClient.caseFile.fetchCaseFiles();
   return (data.caseFiles || []).map((raw) =>
     toCaseFile(raw as Parameters<typeof toCaseFile>[0]),
   );
 }
 
-export async function fetchFolders(_accessToken?: string): Promise<Folder[]> {
-  const data = await apiClient.fetchFolders();
+export async function fetchFolders(): Promise<Folder[]> {
+  const data = await apiClient.folder.fetchFolders();
   return (data.folders || []).map((raw) =>
     toFolder(raw as Parameters<typeof toFolder>[0]),
   );
 }
 
-export async function fetchProjects(_accessToken?: string): Promise<Project[]> {
-  const data = await apiClient.fetchProjects();
+export async function fetchProjects(): Promise<Project[]> {
+  const data = await apiClient.project.fetchProjects();
   return (data.projects || []).map((raw) =>
     toProject(raw as Parameters<typeof toProject>[0]),
   );
@@ -115,7 +113,7 @@ export async function createCaseFile(payload: {
   projectId?: string;
   messages: CaseFile["messages"];
 }): Promise<CaseFile> {
-  const data = await apiClient.createCaseFile({
+  const data = await apiClient.caseFile.createCaseFile({
     caseNumber: payload.caseNumber,
     subject: payload.subject,
     folderId: payload.folderId ?? null,
@@ -137,19 +135,16 @@ export async function updateCaseFile(
     messages?: CaseFile["messages"];
   },
 ): Promise<CaseFile> {
-  const data = await apiClient.updateCaseFile(id, payload);
+  const data = await apiClient.caseFile.updateCaseFile(id, payload);
   return toCaseFile(data as Parameters<typeof toCaseFile>[0]);
 }
 
 export async function deleteCaseFile(id: string): Promise<void> {
-  await apiClient.deleteCaseFile(id);
+  await apiClient.caseFile.deleteCaseFile(id);
 }
 
-export async function createFolder(
-  name: string,
-  color?: string,
-): Promise<Folder> {
-  const data = await apiClient.createFolder(name, color);
+export async function createFolder(name: string, color?: string): Promise<Folder> {
+  const data = await apiClient.folder.createFolder(name, color);
   return toFolder(data as Parameters<typeof toFolder>[0]);
 }
 
@@ -157,19 +152,16 @@ export async function updateFolder(
   id: string,
   payload: { name?: string; color?: string },
 ): Promise<Folder> {
-  const data = await apiClient.updateFolder(id, payload);
+  const data = await apiClient.folder.updateFolder(id, payload);
   return toFolder(data as Parameters<typeof toFolder>[0]);
 }
 
 export async function deleteFolder(id: string): Promise<void> {
-  await apiClient.deleteFolder(id);
+  await apiClient.folder.deleteFolder(id);
 }
 
-export async function createProject(
-  name: string,
-  description?: string,
-): Promise<Project> {
-  const data = await apiClient.createProject(name, description);
+export async function createProject(name: string, description?: string): Promise<Project> {
+  const data = await apiClient.project.createProject(name, description);
   return toProject(data as Parameters<typeof toProject>[0]);
 }
 
@@ -177,24 +169,24 @@ export async function updateProject(
   id: string,
   payload: { name?: string; description?: string },
 ): Promise<Project> {
-  const data = await apiClient.updateProject(id, payload);
+  const data = await apiClient.project.updateProject(id, payload);
   return toProject(data as Parameters<typeof toProject>[0]);
 }
 
 export async function deleteProject(id: string): Promise<void> {
-  await apiClient.deleteProject(id);
+  await apiClient.project.deleteProject(id);
 }
 
 export async function uploadProjectDocument(
   projectId: string,
   file: File,
 ): Promise<ProjectDocument> {
-  return apiClient.uploadProjectDocument(projectId, file);
+  return apiClient.project.uploadProjectDocument(projectId, file);
 }
 
 export async function removeProjectDocument(
   projectId: string,
   documentId: string,
 ): Promise<void> {
-  await apiClient.removeProjectDocument(projectId, documentId);
+  await apiClient.project.removeProjectDocument(projectId, documentId);
 }

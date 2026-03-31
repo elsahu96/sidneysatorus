@@ -149,12 +149,14 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         const newMessages = Array.isArray(result)
           ? result
           : parseAgUiPacketSafe(result);
-        if (newMessages && newMessages.length > 0) {
-          setMessages((prev) => [...prev, ...newMessages]);
-          setStatus("success");
-        } else {
+        if (newMessages == null) {
           setError("Invalid AG-UI response: no messages returned");
           setStatus("error");
+        } else {
+          if (newMessages.length > 0) {
+            setMessages((prev) => [...prev, ...newMessages]);
+          }
+          setStatus("success");
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : "Request failed";

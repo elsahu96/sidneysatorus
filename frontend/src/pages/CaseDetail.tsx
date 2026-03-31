@@ -16,7 +16,7 @@ import { ArrowLeft, Calendar, ChevronDown, ChevronUp, MessageCircle, Send, X, Do
 import { cn } from "@/lib/utils";
 import { useState, useRef, useEffect } from "react";
 import { exportReportToPDF, exportReportMetadataToPDF } from "@/lib/pdfExport";
-import { apiClient } from "@/lib/api";
+import { apiClient } from "@/api/api";
 import { toast } from "sonner";
 
 const CaseDetail = () => {

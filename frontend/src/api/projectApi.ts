@@ -1,56 +1,34 @@
+import { api } from "./client";
+
 export const projectApi = {
-  fetchProjects: (): Promise<{ projects: unknown[] }> =>
-    Promise.resolve({ projects: [] }),
+  fetchProjects: () =>
+    api.get<{ projects: unknown[] }>("/projects").then((r) => ({ projects: r.data.projects })),
 
-  createProject: (name: string, description?: string): Promise<unknown> =>
-    Promise.resolve({
-      id: crypto.randomUUID(),
-      name,
-      description: description ?? null,
-      timestamp: Date.now(),
-      documents: [],
-      reports: [],
-      chatHistory: [],
-    }),
+  createProject: (name: string, description?: string) =>
+    api.post("/projects", { name, description: description ?? null }).then((r) => r.data),
 
-  updateProject: (
-    id: string,
-    payload: { name?: string; description?: string },
-  ): Promise<unknown> =>
-    Promise.resolve({
-      id,
-      name: payload.name ?? "",
-      description: payload.description ?? null,
-      timestamp: Date.now(),
-      documents: [],
-      reports: [],
-      chatHistory: [],
-    }),
+  updateProject: (id: string, payload: { name?: string; description?: string }) =>
+    api.patch(`/projects/${id}`, payload).then((r) => r.data),
 
-  deleteProject: (_id: string): Promise<void> => Promise.resolve(),
+  deleteProject: (id: string) => api.delete(`/projects/${id}`).then(() => {}),
 
-  uploadProjectDocument: (
-    _projectId: string,
-    file: File,
-  ): Promise<{
-    id: string;
-    name: string;
-    size: number;
-    type: string;
-    uploadedAt: number;
-    url: string;
-  }> =>
-    Promise.resolve({
-      id: crypto.randomUUID(),
-      name: file.name,
-      size: file.size,
-      type: file.type,
-      uploadedAt: Date.now(),
-      url: "",
-    }),
+  uploadProjectDocument: (projectId: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return api
+      .post<{
+        id: string;
+        name: string;
+        size: number;
+        type: string;
+        uploadedAt: number;
+        url: string;
+      }>(`/projects/${projectId}/documents`, form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      })
+      .then((r) => r.data);
+  },
 
-  removeProjectDocument: (
-    _projectId: string,
-    _documentId: string,
-  ): Promise<void> => Promise.resolve(),
+  removeProjectDocument: (projectId: string, documentId: string) =>
+    api.delete(`/projects/${projectId}/documents/${documentId}`).then(() => {}),
 };

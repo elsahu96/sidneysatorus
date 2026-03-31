@@ -1,25 +1,14 @@
+import { api } from "./client";
+
 export const folderApi = {
-  fetchFolders: (): Promise<{ folders: unknown[] }> =>
-    Promise.resolve({ folders: [] }),
+  fetchFolders: () =>
+    api.get<{ folders: unknown[] }>("/folders").then((r) => ({ folders: r.data.folders })),
 
-  createFolder: (name: string, color?: string): Promise<unknown> =>
-    Promise.resolve({
-      id: crypto.randomUUID(),
-      name,
-      timestamp: Date.now(),
-      color: color ?? null,
-    }),
+  createFolder: (name: string, color?: string) =>
+    api.post("/folders", { name, color: color ?? null }).then((r) => r.data),
 
-  updateFolder: (
-    id: string,
-    payload: { name?: string; color?: string },
-  ): Promise<unknown> =>
-    Promise.resolve({
-      id,
-      name: payload.name ?? "",
-      timestamp: Date.now(),
-      color: payload.color ?? null,
-    }),
+  updateFolder: (id: string, payload: { name?: string; color?: string }) =>
+    api.patch(`/folders/${id}`, payload).then((r) => r.data),
 
-  deleteFolder: (_id: string): Promise<void> => Promise.resolve(),
+  deleteFolder: (id: string) => api.delete(`/folders/${id}`).then(() => {}),
 };
