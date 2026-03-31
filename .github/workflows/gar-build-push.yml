@@ -42,8 +42,8 @@ env:
   GAR_FRONTEND: ai-sidney-frontend
   GAR_FRONTEND_IMAGE: frontend
   # Match modules/cloud_run: "${replace(app_name,'_','-')}-backend-${environment}" (override via repo Variables if needed)
-  CLOUD_RUN_BACKEND_SERVICE: ${{ vars.CLOUD_RUN_BACKEND_SERVICE || 'ai-sidney-backend-staging' }}
-  CLOUD_RUN_FRONTEND_SERVICE: ${{ vars.CLOUD_RUN_FRONTEND_SERVICE || 'ai-sidney-frontend-staging' }}
+  CLOUD_RUN_BACKEND_SERVICE: ${{ secrets.CLOUD_RUN_BACKEND_SERVICE || 'ai-sidney-backend-staging' }}
+  CLOUD_RUN_FRONTEND_SERVICE: ${{ secrets.CLOUD_RUN_FRONTEND_SERVICE || 'ai-sidney-frontend-staging' }}
 
 jobs:
   build-push:
@@ -97,7 +97,7 @@ jobs:
 
       - name: Check VITE_API_URL (required for frontend build)
         env:
-          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
         run: |
           if [ -z "${VITE_API_URL:-}" ]; then
             echo "::error::Set repository variable VITE_API_URL (Settings → Secrets and variables → Actions → Variables) to your backend Cloud Run HTTPS URL."
@@ -111,19 +111,19 @@ jobs:
           file: ./frontend/Dockerfile
           push: true
           build-args: |
-            VITE_API_URL=${{ vars.VITE_API_URL }}
-            VITE_WS_URL=${{ vars.VITE_WS_URL }}
-            VITE_SUPABASE_URL=${{ vars.VITE_SUPABASE_URL }}
-            VITE_SUPABASE_PUBLISHABLE_KEY=${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
-            VITE_MAPBOX_API_KEY=${{ vars.VITE_MAPBOX_API_KEY }}
-            VITE_FIREBASE_API_KEY=${{ vars.VITE_FIREBASE_API_KEY }}
-            VITE_FIREBASE_AUTH_DOMAIN=${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
-            VITE_FIREBASE_PROJECT_ID=${{ vars.VITE_FIREBASE_PROJECT_ID }}
-            VITE_FIREBASE_STORAGE_BUCKET=${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
-            VITE_FIREBASE_MESSAGING_SENDER_ID=${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
-            VITE_FIREBASE_APP_ID=${{ vars.VITE_FIREBASE_APP_ID }}
-            VITE_FIREBASE_MEASUREMENT_ID=${{ vars.VITE_FIREBASE_MEASUREMENT_ID }}
-            VITE_SATORUS_TENANT_ID=${{ vars.VITE_SATORUS_TENANT_ID }}
+            VITE_API_URL=${{ secrets.VITE_API_URL }}
+            VITE_WS_URL=${{ secrets.VITE_WS_URL }}
+            VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
+            VITE_SUPABASE_PUBLISHABLE_KEY=${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+            VITE_MAPBOX_API_KEY=${{ secrets.VITE_MAPBOX_API_KEY }}
+            VITE_FIREBASE_API_KEY=${{ secrets.VITE_FIREBASE_API_KEY }}
+            VITE_FIREBASE_AUTH_DOMAIN=${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+            VITE_FIREBASE_PROJECT_ID=${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+            VITE_FIREBASE_STORAGE_BUCKET=${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+            VITE_FIREBASE_MESSAGING_SENDER_ID=${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+            VITE_FIREBASE_APP_ID=${{ secrets.VITE_FIREBASE_APP_ID }}
+            VITE_FIREBASE_MEASUREMENT_ID=${{ secrets.VITE_FIREBASE_MEASUREMENT_ID }}
+            VITE_SATORUS_TENANT_ID=${{ secrets.VITE_SATORUS_TENANT_ID }}
           tags: |
             ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_FRONTEND }}/${{ env.GAR_FRONTEND_IMAGE }}:${{ env.TAG }}
             ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_FRONTEND }}/${{ env.GAR_FRONTEND_IMAGE }}:latest
