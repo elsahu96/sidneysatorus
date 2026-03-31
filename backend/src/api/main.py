@@ -22,8 +22,13 @@ BUCKET_NAME = (
 _FRONTEND_URL = os.getenv("FRONTEND_URL") or "http://localhost:4567"
 
 
-cred = credentials.Certificate(os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
-firebase_admin.initialize_app(cred)
+# On Cloud Run: GOOGLE_APPLICATION_CREDENTIALS is not set — use ADC (the revision's service account).
+# Locally: point GOOGLE_APPLICATION_CREDENTIALS at your Firebase service-account JSON and it is used instead.
+_firebase_cred_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+if _firebase_cred_path:
+    firebase_admin.initialize_app(credentials.Certificate(_firebase_cred_path))
+else:
+    firebase_admin.initialize_app()
 
 app = FastAPI(title="Sidney Backend API", version="1.0.0")
 
