@@ -40,9 +40,13 @@ Then in `backend/.env` (replace `your_username` with your macOS username, or use
 DATABASE_URL=postgresql://your_username@localhost:5432/sidney
 ```
 
-### Option C: Cloud / Prisma Data Platform
+### Option C: GCP Cloud SQL
 
-Use an existing Postgres URL (e.g. from [Prisma Data Platform](https://prisma.io) or another provider). Set `DATABASE_URL` in `.env` to that connection string.
+Use the Cloud SQL Auth Proxy (see main CLAUDE.md for setup). Set `DATABASE_URL` in `.env` to the local proxy URL:
+
+```env
+DATABASE_URL=postgresql://USER:PASSWORD@localhost:5433/ai_sidney_staging
+```
 
 ---
 
@@ -90,7 +94,7 @@ cd backend
 python prisma/seed.py
 ```
 
-- **First run:** Creates a demo user (`demo@sidney.local` / supabase_id `seed-demo-user-001`), a team, and mock folders, projects, case files, and documents.
+- **First run:** Creates a demo user (`demo@sidney.local` / firebase_uid `seed-demo-user-001`), a team, and mock folders, projects, case files, and documents.
 - **Re-run:** Reuses the same demo user/team and adds more data (folders/projects/case files are created again).
 
 To seed into an **existing team** (e.g. after you’ve signed in and have a team_id):

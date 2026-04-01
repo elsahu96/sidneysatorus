@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Loader2, Plus } from "lucide-react";
+import { Send, Square, Plus } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { cn } from "@/lib/utils";
@@ -64,11 +64,16 @@ interface PendingReport {
   role: "assistant";
   content: string;
   selectedAccount?: string;
+  duration?: number;
 }
 
-function isRequestCancelled(err: unknown): boolean {
-  if (!axios.isAxiosError(err)) return false;
-  return err.code === "ERR_CANCELED";
+/** Pending report from the real investigation API — shown immediately on API return */
+interface PendingApiReport {
+  id: string;
+  content: string;
+  geolocations: GeolocationItem[];
+  references: ReferenceItem[];
+  duration: number;
 }
 
 function getInvestigationErrorMessage(err: unknown): string {
@@ -81,7 +86,7 @@ function getInvestigationErrorMessage(err: unknown): string {
       typeof err.response?.data === "string" &&
       /<!doctype html>|<html/i.test(err.response.data)
     ) {
-      return `API returned HTML instead of JSON. Check VITE_API_URL (${API_BASE_URL}) and ensure backend is running.`;
+      return `API returned HTML instead of JSON. Check VITE_API_URL (${import.meta.env.VITE_API_URL}) and ensure backend is running.`;
     }
     if (typeof err.response?.data === "string" && err.response.data.trim()) {
       return err.response.data;
@@ -99,6 +104,13 @@ export const ChatInterface = () => {
   const [loadingStages, setLoadingStages] = useState<string[]>([]);
   const [attachmentByMessageId, setAttachmentByMessageId] = useState<Record<string, MessageAttachment>>({});
   const [pendingReports, setPendingReports] = useState<PendingReport[]>([]);
+  const [pendingApiReports, setPendingApiReports] = useState<PendingApiReport[]>([]);
+  const [estimatedSeconds, setEstimatedSeconds] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [reportDuration, setReportDuration] = useState<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const elapsedRef = useRef(0);
+  const activeThreadId = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const investigateAbortRef = useRef<AbortController | null>(null);
@@ -106,8 +118,11 @@ export const ChatInterface = () => {
   const location = useLocation();
   const { addCaseFile } = useCaseFiles();
 
-  const performInvestigationApi = useCallback(async (query: string, signal?: AbortSignal) => {
-    const reportMeta = await apiClient.investigate.start(query, { signal });
+  const performInvestigationApi = useCallback(async (query: string) => {
+    const threadId = crypto.randomUUID();
+    activeThreadId.current = threadId;
+    const reportMeta = await apiClient.investigate.start(query, { signal: investigateAbortRef.current?.signal });
+    activeThreadId.current = null;
     if (!reportMeta?.id) {
       throw new Error("Investigation returned no report ID");
     }
@@ -149,7 +164,7 @@ export const ChatInterface = () => {
       };
   
       // Handle user cancellation
-      signal?.addEventListener("abort", () => {
+      investigateAbortRef.current?.signal?.addEventListener("abort", () => {
         socket.close();
         reject(new Error("Investigation cancelled"));
       });
@@ -201,24 +216,25 @@ export const ChatInterface = () => {
         }
 
 
-        investigateAbortRef.current?.abort();
-        investigateAbortRef.current = new AbortController();
-        const result = await performInvestigationApi(content, investigateAbortRef.current.signal);
-        const id = createMessageId();
-        const assistantMsg = {
-          id,
-          role: "assistant" as const,
-          content: result.content.slice(0, 80) || "Investigation complete.",
-        };
-        setAttachmentByMessageId((prev) => ({
+        const result = await performInvestigationApi(content);
+        const capturedDuration = elapsedRef.current;
+
+        // Show the report immediately — don't wait for transport to finish
+        setReportDuration(capturedDuration);
+        setEstimatedSeconds(0);
+        setLoadingStages([]);
+        setPendingApiReports((prev) => [
           ...prev,
-          [id]: {
-            reportContent: result.content,
+          {
+            id: createMessageId(),
+            content: result.content,
             geolocations: result.geolocations,
             references: result.references,
-            isInvestigationApiReport: true,
+            duration: capturedDuration,
           },
-        }));
+        ]);
+
+        // Save to case files in the background (non-blocking for the user)
         const caseFileMessages: CaseFile["messages"] = input.messages
           .filter((m) => m.role === "user" || m.role === "assistant")
           .map((m) => ({
@@ -244,9 +260,9 @@ export const ChatInterface = () => {
           messages: caseFileMessages,
         });
         toast.success("Investigation saved to case files");
-        return [assistantMsg];
+        return [];
       } catch (err: unknown) {
-        if (isRequestCancelled(err)) {
+        if (axios.isCancel(err)) {  
           const id = createMessageId();
           return [
             {
@@ -280,21 +296,33 @@ export const ChatInterface = () => {
   const [input, setInput] = useState("");
   const isLoading = status === "loading";
 
-  const handleCancelInvestigation = useCallback(async () => {
-  investigateAbortRef.current?.abort();
-
-  if (activeTaskId) {
-    try {
-      await apiClient.investigate.terminate(activeTaskId);
-      toast.success("Investigation process terminated.");
-    } catch (err) {
-      console.error("Backend termination failed:", err);
-    } finally {
-      setActiveTaskId(null);
-      setLoadingStages([]);
+  // Progress bar timer
+  useEffect(() => {
+    if (isLoading) {
+      const secs = Math.floor(Math.random() * (7 - 4 + 1) + 4) * 60; // 4–7 min in seconds
+      setEstimatedSeconds(secs);
+      setElapsedSeconds(0);
+      elapsedRef.current = 0;
+      timerRef.current = setInterval(() => {
+        elapsedRef.current += 1;
+        setElapsedSeconds((prev) => prev + 1);
+      }, 1000);
+    } else {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      if (elapsedRef.current > 0) {
+        setReportDuration(elapsedRef.current);
+      }
+      elapsedRef.current = 0;
+      setElapsedSeconds(0);
+      setEstimatedSeconds(0);
     }
-  }
-}, [activeTaskId]);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [isLoading]);
 
   // Reset chat when navigating back to home
   useEffect(() => {
@@ -302,6 +330,7 @@ export const ChatInterface = () => {
       reset();
       setAttachmentByMessageId({});
       setPendingReports([]);
+      setPendingApiReports([]);
       setInput("");
       setLoadingStages([]);
       navigate("/", { replace: true, state: {} });
@@ -354,33 +383,19 @@ export const ChatInterface = () => {
         "Detecting controversial content",
         "Generating detailed report",
       ]);
+      const accountSelectionStart = Date.now();
       await new Promise((r) => setTimeout(r, 7500));
+      const accountSelectionDuration = Math.round((Date.now() - accountSelectionStart) / 1000);
       setLoadingStages([]);
       const id = createMessageId();
-      setPendingReports((prev) => [
-        ...prev,
-        { id, role: "assistant", content: "Russell Cherry Investigation Report", selectedAccount: username },
-      ]);
+      
       const caseFileMessages: CaseFile["messages"] = messages
         .filter((m) => m.role === "user" || m.role === "assistant")
         .map((m) => ({
           role: m.role as "user" | "assistant",
           content: typeof m.content === "string" ? m.content : "",
         }));
-      caseFileMessages.push({
-        role: "assistant",
-        content: "Russell Cherry Investigation Report",
-        isRussellCherryReport: true,
-        selectedAccount: username,
-      });
-      addCaseFile({
-        id: Date.now().toString(),
-        caseNumber: "Russell Cherry",
-        subject: "Russell Cherry",
-        timestamp: Date.now(),
-        category: "Russell Cherry",
-        messages: caseFileMessages,
-      });
+      
       toast.success("Investigation saved to case files");
     },
     [messages, addCaseFile]
@@ -390,10 +405,28 @@ export const ChatInterface = () => {
     reset();
     setAttachmentByMessageId({});
     setPendingReports([]);
+    setPendingApiReports([]);
     setInput("");
     setLoadingStages([]);
     toast.success("Chat cleared");
   }, [reset]);
+
+  const handleStop = useCallback(() => {
+    if (activeThreadId.current) {
+      apiClient.cancelInvestigation(activeThreadId.current);
+      activeThreadId.current = null;
+    }
+    reset();
+    setLoadingStages([]);
+    toast.info("Investigation stopped");
+  }, [reset]);
+
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (mins > 0) return `${mins} min ${secs} sec`;
+    return `${secs} sec`;
+  };
 
   const renderMessage = (msg: AgUiMessage) => {
     const attachment = attachmentByMessageId[msg.id];
@@ -422,20 +455,26 @@ export const ChatInterface = () => {
             geolocations={attachment.geolocations}
             references={attachment.references}
           />
+          {reportDuration != null && (
+            <p className="mt-4 text-xs text-muted-foreground text-right">Analysis completed in {formatDuration(reportDuration)}</p>
+          )}
         </div>
       );
     }
-    if (attachment?.isAccountSelector) {
-      return (
-        <div key={msg.id} className="rounded-lg p-4 bg-background max-w-2xl">
-          <XAccountSelector onConfirm={handleAccountSelection} />
-        </div>
-      );
-    }
+    // if (attachment?.isAccountSelector) {
+    //   return (
+    //     <div key={msg.id} className="rounded-lg p-4 bg-background max-w-2xl">
+    //       <XAccountSelector onConfirm={handleAccountSelection} />
+    //     </div>
+    //   );
+    // }
     if (attachment?.isReport) {
       return (
         <div key={msg.id} className="rounded-lg p-4 bg-background max-w-2xl">
           <InvestigationReport name={typeof msg.content === "string" ? msg.content : ""} />
+          {reportDuration != null && (
+            <p className="mt-4 text-xs text-muted-foreground text-right">Analysis completed in {formatDuration(reportDuration)}</p>
+          )}
         </div>
       );
     }
@@ -446,12 +485,35 @@ export const ChatInterface = () => {
     );
   };
 
-  const hasMessages = messages.length > 0 || pendingReports.length > 0;
+  const hasMessages = messages.length > 0 || pendingReports.length > 0 || pendingApiReports.length > 0;
 
   return (
     <div className="flex flex-col h-full">
       {!hasMessages ? (
         <div className="flex flex-col items-center justify-center flex-1 px-4">
+          {isLoading && estimatedSeconds > 0 && (() => {
+            const pct = Math.min(Math.round((elapsedSeconds / estimatedSeconds) * 100), 95);
+            const remaining = Math.max(estimatedSeconds - elapsedSeconds, 0);
+            const mins = Math.floor(remaining / 60);
+            const secs = remaining % 60;
+            return (
+              <div className="w-full max-w-3xl mb-6 space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <LoadingStages stages={loadingStages.length > 0 ? loadingStages : ["Analysing intelligence sources…"]} />
+                  <span className="font-mono font-medium text-foreground">{pct}%</span>
+                </div>
+                <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all duration-1000 ease-linear"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground text-right">
+                  Estimated time remaining: {mins}m {secs.toString().padStart(2, "0")}s
+                </p>
+              </div>
+            );
+          })()}
           <div className="mb-8 text-center">
             <h2 className="mb-2 text-3xl font-semibold text-foreground">Welcome back, {user?.displayName ?? user?.email ?? "Guest"}.</h2>
 
@@ -481,36 +543,11 @@ export const ChatInterface = () => {
               {isLoading ? (
                 <button
                   type="button"
-                  onClick={handleCancelInvestigation}
+                  onClick={handleStop}
                   className="absolute right-3 bottom-3 rounded-md p-1.5 text-destructive hover:bg-destructive/10 transition-all duration-150"
-                  aria-label="Cancel investigation"
-                  title="Cancel investigation"
+                  title="Stop investigation"
                 >
-                  <span className="absolute bottom-full mb-2 hidden group-hover:block bg-destructive text-white text-[10px] px-2 py-1 rounded">
-                    Kill Process
-                  </span>
-                  
-                  <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M8.4 2.5h7.2l5.9 5.9v7.2l-5.9 5.9H8.4L2.5 15.6V8.4L8.4 2.5Z"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinejoin="round"
-                    />
-                    <path
-                      d="M8.5 12h7"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                    />
-                  </svg>
+                  <Square className="h-4 w-4 fill-current" />
                 </button>
               ) : (
                 <button
@@ -518,9 +555,7 @@ export const ChatInterface = () => {
                   disabled={!input.trim()}
                   className={cn(
                     "absolute right-3 bottom-3 rounded-md p-1.5 transition-all duration-150",
-                    input.trim()
-                      ? "text-primary hover:bg-primary/10"
-                      : "text-muted-foreground/30 cursor-not-allowed"
+                    input.trim() ? "text-primary hover:bg-primary/10" : "text-muted-foreground/30 cursor-not-allowed"
                   )}
                 >
                   <Send className="h-5 w-5" />
@@ -534,35 +569,42 @@ export const ChatInterface = () => {
               <button
                 onClick={() =>
                   setInput(
-                    "I would like to run an investigation on Roman Abramovich, the details I have on him are he is Russian born in the 1960's."
+                    "I am advising a pro-Islam NGO establishing operations in the United Kingdom. Assess environments where the organisation may encounter hostility, counter-protests, or other kinds of violence. "
                   )
                 }
                 className="rounded-lg border border-border bg-card px-4 py-2.5 text-sm text-foreground/80 transition-all hover:border-primary hover:bg-card/80"
               >
-                Roman Abramovich
+                NGO environment analysis
               </button>
               <button
                 onClick={() =>
                   setInput(
-                    "I am investigating Russell Cherry, help me find his X account, He has worked previously as a councillor. Please analyse his profile with a focus on his political views and affiliations, as well as anything which could be deemed as controversial."
+                    "Map current zones of instability along the Pakistan-Afghanistan border. Break down by sub-region"
                   )
                 }
                 className="rounded-lg border border-border bg-card px-4 py-2.5 text-sm text-foreground/80 transition-all hover:border-primary hover:bg-card/80"
               >
-                Russell Cherry
+                Pakistan-Afghanistan border instability
               </button>
               <button
                 onClick={() =>
                   setInput(
-                    "Map the current sanctions-evasion ecosystem for Iranian petrochemicals, detailing producer and broker networks and maritime concealment patterns"
+                    "Assess risks to a civilian or analytical team operating in Cyprus following the recent Iranian attack on the British military base. Break down by sub-region"
                   )
                 }
                 className="rounded-lg border border-border bg-card px-4 py-2.5 text-sm text-foreground/80 transition-all hover:border-primary hover:bg-card/80"
               >
-                Iranian Petrochemicals
+                UK military base attack risks
               </button>
-              <button className="rounded-lg border border-border bg-card px-4 py-2.5 text-sm text-foreground/80 transition-all hover:border-primary hover:bg-card/80">
-                Abbas Araghchi
+              <button
+                onClick={() =>
+                  setInput(
+                    "I run a Berlin-based company that depends on energy and materials shipped through the Strait of Hormuz. how might the current conflict involving Iran impact my operations? "
+                  )
+                }
+                className="rounded-lg border border-border bg-card px-4 py-2.5 text-sm text-foreground/80 transition-all hover:border-primary hover:bg-card/80"
+              >
+                Strait of Hormuz impact
               </button>
             </div>
           </div>
@@ -581,13 +623,46 @@ export const ChatInterface = () => {
               {pendingReports.map((pr) => (
                 <div key={pr.id} className="rounded-lg p-4 bg-background max-w-2xl">
                   <RussellCherryReport username={pr.selectedAccount ?? "russcherry5"} />
+                  {pr.duration != null && (
+                    <p className="mt-4 text-xs text-muted-foreground text-right">Analysis completed in {formatDuration(pr.duration)}</p>
+                  )}
                 </div>
               ))}
-              {isLoading && (
-                <div className="rounded-lg border bg-background p-6">
-                  <LoadingStages stages={loadingStages} />
+              {pendingApiReports.map((pr) => (
+                <div key={pr.id} className="rounded-lg p-4 text-sm max-w-2xl bg-background text-foreground border border-border shadow-sm">
+                  <InvestigationApiReport
+                    content={pr.content}
+                    geolocations={pr.geolocations}
+                    references={pr.references}
+                  />
+                  <p className="mt-4 text-xs text-muted-foreground text-right">Analysis completed in {formatDuration(pr.duration)}</p>
                 </div>
-              )}
+              ))}
+              {isLoading && estimatedSeconds > 0 && (() => {
+                const pct = Math.min(Math.round((elapsedSeconds / estimatedSeconds) * 100), 95);
+                const remaining = Math.max(estimatedSeconds - elapsedSeconds, 0);
+                const mins = Math.floor(remaining / 60);
+                const secs = remaining % 60;
+                return (
+                  <div className="rounded-lg border bg-background p-6 space-y-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <LoadingStages stages={loadingStages.length > 0 ? loadingStages : ["Analysing intelligence sources…"]} />
+                        <span className="font-mono font-medium text-foreground">{pct}%</span>
+                      </div>
+                      <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-primary transition-all duration-1000 ease-linear"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground text-right">
+                        Estimated time remaining: {mins}m {secs.toString().padStart(2, "0")}s
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
               <div ref={messagesEndRef} />
             </div>
           </div>
@@ -624,32 +699,11 @@ export const ChatInterface = () => {
                 {isLoading ? (
                   <button
                     type="button"
-                    onClick={handleCancelInvestigation}
+                    onClick={handleStop}
                     className="absolute right-3 bottom-3 rounded-md p-1.5 text-destructive hover:bg-destructive/10 transition-all duration-150"
-                    aria-label="Cancel investigation"
-                    title="Cancel investigation"
+                    title="Stop investigation"
                   >
-                    <svg
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                      aria-hidden="true"
-                    >
-                      <path
-                        d="M8.4 2.5h7.2l5.9 5.9v7.2l-5.9 5.9H8.4L2.5 15.6V8.4L8.4 2.5Z"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinejoin="round"
-                      />
-                      <path
-                        d="M8.5 12h7"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                      />
-                    </svg>
+                    <Square className="h-4 w-4 fill-current" />
                   </button>
                 ) : (
                   <button
@@ -657,9 +711,7 @@ export const ChatInterface = () => {
                     disabled={!input.trim()}
                     className={cn(
                       "absolute right-3 bottom-3 rounded-md p-1.5 transition-all duration-150",
-                      input.trim()
-                        ? "text-primary hover:bg-primary/10"
-                        : "text-muted-foreground/30 cursor-not-allowed"
+                      input.trim() ? "text-primary hover:bg-primary/10" : "text-muted-foreground/30 cursor-not-allowed"
                     )}
                   >
                     <Send className="h-5 w-5" />

@@ -2,8 +2,9 @@
 # From repo root: gcloud builds submit --config deploy/cloudbuild-backend.yaml .
 
 substitutions:
-  _REGION: us-central1
-  _SERVICE: backend
+  _REGION: europe-west2
+  _SERVICE: ai-sidney-backend-staging
+  _CLOUDSQL_INSTANCE: satorus-sidney-dev:europe-west2:ai-sidney-postgres
 
 steps:
   - name: gcr.io/cloud-builders/docker
@@ -34,6 +35,10 @@ steps:
       - --platform
       - managed
       - --allow-unauthenticated
+      - --add-cloudsql-instances
+      - ${_CLOUDSQL_INSTANCE}
+      - --update-secrets
+      - DATABASE_URL=DATABASE_URL:latest
     waitFor: ["-"]
 
 images:

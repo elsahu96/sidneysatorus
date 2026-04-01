@@ -40,6 +40,14 @@
    uv run uvicorn src.api.main:app --reload
    ```
 
+### Cloud SQL
+
+Run the command to start the local Cloud SQL server for testing
+
+```sh
+cloud-sql-proxy satorus-sidney-dev:europe-west2:ai-sidney-postgres --port 6000
+```
+
 ### Docker
 
 #### Backend
