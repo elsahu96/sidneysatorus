@@ -42,6 +42,7 @@ def _use_gcs() -> bool:
 
 def _gcs_storage():
     from src.storage_factory import GCSDocumentStorage
+
     bucket = os.getenv("GCS_BUCKET", "")
     if not bucket:
         raise ValueError("GCS_BUCKET env var is required when STORAGE_BACKEND=gcs")
@@ -98,17 +99,23 @@ async def list_reports(user=Depends(verify_token)):
                     raw = json.loads(storage.download(path))
                     title = raw.get("metadata", {}).get("title", report_id)
                     written_at = raw.get("metadata", {}).get("written_at")
-                    created = datetime.fromisoformat(written_at) if written_at else datetime.now()
+                    created = (
+                        datetime.fromisoformat(written_at)
+                        if written_at
+                        else datetime.now()
+                    )
                 except Exception:
                     title = report_id
                     created = datetime.now()
-                reports.append(Report(
-                    id=report_id,
-                    name=title,
-                    storage_path=path,
-                    mime_type="application/json",
-                    created_at=created,
-                ))
+                reports.append(
+                    Report(
+                        id=report_id,
+                        name=title,
+                        storage_path=path,
+                        mime_type="application/json",
+                        created_at=created,
+                    )
+                )
             return {"reports": reports}
         except Exception:
             logger.exception("Failed to list reports from GCS for uid=%s", uid)
@@ -156,7 +163,8 @@ async def get_report(report_id: str, user=Depends(verify_token)):
         except Exception:
             logger.warning(
                 "Report %s not found in GCS for uid=%s, falling back to local",
-                report_id, uid,
+                report_id,
+                uid,
             )
 
     report_dir = _report_dir()

@@ -16,7 +16,7 @@ import { ArrowLeft, Calendar, ChevronDown, ChevronUp, MessageCircle, Send, X, Do
 import { cn } from "@/lib/utils";
 import { useState, useRef, useEffect } from "react";
 import { exportReportToPDF, exportReportMetadataToPDF } from "@/lib/pdfExport";
-import { apiClient } from "@/lib/api";
+import { apiClient } from "@/api/api";
 import { toast } from "sonner";
 
 const CaseDetail = () => {
@@ -167,7 +167,7 @@ const CaseDetail = () => {
                       if (finalReport?.isReport) {
                         setExportingPdf(true);
                         try {
-                          const report = await apiClient.getReport(caseFile.caseNumber);
+                          const report = await apiClient.report.getReport(caseFile.caseNumber);
                           exportReportMetadataToPDF(report);
                           toast.success("Report exported to PDF");
                         } catch {

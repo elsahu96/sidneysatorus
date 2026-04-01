@@ -3,10 +3,11 @@ import logging
 import os
 import re
 import uuid
+from time import sleep
 from dotenv import load_dotenv
 
 load_dotenv()
-from src.graph.tools.writer import _last_write_result  
+from src.graph.tools.writer import _last_write_result
 from deepagents.graph import create_deep_agent
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import MemorySaver
@@ -16,6 +17,7 @@ from src.graph.agents import (
     planning_subagent,
     research_subagent,
     writer_subagent,
+    asknews_subagent,
 )
 
 # ── Logging (replaces raw print for non-interactive output) ─────────────────
@@ -23,7 +25,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME")
 if not MODEL_NAME:
@@ -34,7 +36,7 @@ checkpointer = MemorySaver()
 agent = create_deep_agent(
     model=MODEL_NAME,
     tools=[],
-    subagents=[planning_subagent, research_subagent, writer_subagent],
+    subagents=[planning_subagent, research_subagent, writer_subagent, asknews_subagent],
     checkpointer=checkpointer,
     interrupt_on={},
     system_prompt=SystemMessage(
@@ -120,6 +122,8 @@ def run_with_hitl(
     Returns:
         The json_path of the written report, or None if the writer did not run.
     """
+    # ############################################################
+
     _last_write_result.clear()
     # Auto-generate thread_id to prevent checkpointer state bleed across runs
     if thread_id is None:
@@ -127,21 +131,15 @@ def run_with_hitl(
 
     config = {"configurable": {"thread_id": thread_id}}
 
-    print(f"\n{'='*60}")
-    print(f"  TASK   : {task}")
-    print(f"  THREAD : {thread_id}")
-    print(f"  MODEL  : {MODEL_NAME}")
-    print(f"{'='*60}\n")
-
-    log.info("Invoking agent...")
+    logger.info("Invoking agent...")
     result = agent.invoke({"messages": [HumanMessage(content=task)]}, config=config)
-    log.info("Initial invocation complete.")
+    logger.info("Initial invocation complete.")
 
     iteration = 0
     while True:
         interrupts = result.get("__interrupt__", [])
         if not interrupts:
-            log.info("No pending interrupts — task complete.")
+            logger.info("No pending interrupts — task complete.")
             break
 
         iteration += 1
@@ -150,18 +148,18 @@ def run_with_hitl(
         for interrupt in interrupts:
             # Defensive: handle unexpected interrupt shapes
             if not isinstance(interrupt.value, dict):
-                log.warning("Unexpected interrupt format: %s", interrupt.value)
+                logger.warning("Unexpected interrupt format: %s", interrupt.value)
                 continue
 
             action_requests = interrupt.value.get("action_requests", [])
             if not action_requests:
-                log.warning(
+                logger.warning(
                     "Interrupt contained no action_requests: %s", interrupt.value
                 )
                 continue
 
-            print(
-                f"\n[agent] Iteration {iteration}: {len(action_requests)} action(s) pending.\n"
+            logger.info(
+                "Iteration %d: %d action(s) pending.", iteration, len(action_requests)
             )
 
             for action_request in action_requests:
@@ -169,30 +167,31 @@ def run_with_hitl(
                 decisions.append(decision)
 
         if not decisions:
-            log.warning("No decisions made — breaking to avoid infinite loop.")
+            logger.warning("No decisions made — breaking to avoid infinite loop.")
             break
 
-        log.info("Resuming with %d decision(s)...", len(decisions))
+        logger.info("Resuming with %d decision(s)...", len(decisions))
         result = agent.invoke(
             Command(resume={"decisions": decisions}),
             config=config,
         )
-        log.info("Resume complete.")
+        logger.info("Resume complete.")
 
     # ── Final output ──────────────────────────────────────────────────────────
     messages = result.get("messages", [])
     if messages:
-        print(f"\n{'='*60}")
-        print("  FINAL OUTPUT")
-        print(f"{'='*60}")
-        print(messages[-1].content)
+        logger.info("Final output: %s", messages[-1].content)
 
     json_path = _last_write_result.get("json_path")
     if json_path:
-        log.info("Report written to: %s", json_path)
+        logger.info("Report written to: %s", json_path)
     else:
-        log.warning("Writer agent did not return a json_path.")
+        logger.warning("Writer agent did not return a json_path.")
 
+    # ############################################################
+    # sleep(10)
+    # json_path = "/Users/elsahu/projects/sidneyb/ysatorus-endeavour-main/reports/report_20260320_115451.json"
+    logger.info("Graph flow: report written to: %s", json_path)
     return json_path
 
 

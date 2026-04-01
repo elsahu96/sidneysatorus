@@ -3,7 +3,7 @@
  * All requests use the auth-backed api client (Bearer token).
  */
 
-import { apiClient } from "@/lib/api";
+import { apiClient } from "@/api/api";
 import type {
   CaseFile,
   Folder,
@@ -100,9 +100,7 @@ export async function fetchFolders(_accessToken?: string): Promise<Folder[]> {
   );
 }
 
-export async function fetchProjects(
-  _accessToken?: string,
-): Promise<Project[]> {
+export async function fetchProjects(_accessToken?: string): Promise<Project[]> {
   const data = await apiClient.fetchProjects();
   return (data.projects || []).map((raw) =>
     toProject(raw as Parameters<typeof toProject>[0]),

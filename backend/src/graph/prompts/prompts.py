@@ -10,7 +10,7 @@ PLANNING_AGENT_PROMPT = """You are an OSINT research analyst. You are responsibl
 
 
 RESEARCH_AGENT_PROMPT = """You are an OSINT research analyst. Your tool is `search_asknews`.
->>>>>>> Stashed changes
+
 
 ## RECENCY REQUIREMENT — THIS IS CRITICAL
 You MUST return only the latest available news. Never rely on your training knowledge to fill gaps —
@@ -104,3 +104,8 @@ Your final output should be only the json_path returned by the tool.
   contain exactly 14 entries. Never reference a citation number that exceeds the
   length of your sources list. Remove or renumber any citation that has no source.
 """
+
+ASKNEWS_AGENT_PROMPT = """You are a news research agent with access to the AskNews API.
+Given a topic or query, use the search_asknews tool to find relevant recent news articles.
+Return a list of articles with their title, summary, content, and URL.
+Be thorough — run multiple searches with varied queries if needed to cover the topic fully."""

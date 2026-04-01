@@ -9,11 +9,15 @@ from src.service.tenants import TENANTS
 
 security = HTTPBearer()
 
-PROJECT_ID = os.environ["GOOGLE_CLOUD_PROJECT"]
+# Cloud Run does not set this by default; Terraform sets GOOGLE_CLOUD_PROJECT on the backend service.
+PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GCP_PROJECT", "")
 logger = logging.getLogger(__name__)
 
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Security(security)):
+    if not PROJECT_ID:
+        logger.error("GOOGLE_CLOUD_PROJECT or GCP_PROJECT must be set for Firebase token verification")
+        raise HTTPException(status_code=500, detail="Server misconfiguration: missing GOOGLE_CLOUD_PROJECT")
     token = credentials.credentials
     try:
         # Verify ID Token（will automatically connect to Google to verify the signature）

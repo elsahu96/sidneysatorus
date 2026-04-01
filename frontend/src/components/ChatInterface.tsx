@@ -11,7 +11,8 @@ import { LoadingStages } from "@/components/LoadingStages";
 import { useCaseFiles, type CaseFile } from "@/contexts/CaseFilesContext";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { apiClient, API_BASE_URL } from "@/lib/api";
+import { apiClient } from "@/api/api";
+import { useInvestigation } from "@/hooks/useInvestigation";
 import type { ReportMetadata, GeolocationItem, ReportSource } from "@/types/index";
 import type { ReferenceItem } from "@/components/InvestigationReferences";
 import { MessageBubble } from "@/components/MessageBubble";
@@ -85,7 +86,7 @@ function getInvestigationErrorMessage(err: unknown): string {
       typeof err.response?.data === "string" &&
       /<!doctype html>|<html/i.test(err.response.data)
     ) {
-      return `API returned HTML instead of JSON. Check VITE_API_URL (${API_BASE_URL}) and ensure backend is running.`;
+      return `API returned HTML instead of JSON. Check VITE_API_URL (${import.meta.env.VITE_API_URL}) and ensure backend is running.`;
     }
     if (typeof err.response?.data === "string" && err.response.data.trim()) {
       return err.response.data;
@@ -99,6 +100,7 @@ function getInvestigationErrorMessage(err: unknown): string {
 export const ChatInterface = () => {
   const { user } = useAuth();
   const [isFocused, setIsFocused] = useState(false);
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [loadingStages, setLoadingStages] = useState<string[]>([]);
   const [attachmentByMessageId, setAttachmentByMessageId] = useState<Record<string, MessageAttachment>>({});
   const [pendingReports, setPendingReports] = useState<PendingReport[]>([]);
@@ -111,6 +113,7 @@ export const ChatInterface = () => {
   const activeThreadId = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const investigateAbortRef = useRef<AbortController | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const { addCaseFile } = useCaseFiles();
@@ -118,20 +121,54 @@ export const ChatInterface = () => {
   const performInvestigationApi = useCallback(async (query: string) => {
     const threadId = crypto.randomUUID();
     activeThreadId.current = threadId;
-    const reportMeta = await apiClient.investigate(query, threadId);
+    const reportMeta = await apiClient.investigate.start(query, { signal: investigateAbortRef.current?.signal });
     activeThreadId.current = null;
     if (!reportMeta?.id) {
       throw new Error("Investigation returned no report ID");
     }
-    const report = await apiClient.getReport(reportMeta.id);
-    const meta = report as ReportMetadata;
-    return {
-      id: reportMeta.id,
-      name: reportMeta.name ?? reportMeta.id,
-      content: meta?.content ?? "",
-      geolocations: meta?.geolocations ?? [],
-      references: (meta?.sources ?? []) as ReferenceItem[],
-    };
+    console.log("ChatInterface: performInvestigationApi: reportMeta:", reportMeta);
+    setActiveTaskId(reportMeta.id);
+    // 2. Use Promise to wrap the WebSocket waiting process
+    return new Promise((resolve, reject) => {
+      console.log("Initiating WebSocket connection...");
+      
+      const socket = apiClient.investigate.connectStatus(reportMeta.id, async (data) => {
+        console.log("WS Message received:", data);
+        
+        if (data.status === "completed") {
+          socket.close();
+          try {
+            const report = await apiClient.investigate.getReport(data.report_id);
+            resolve({
+              id: reportMeta.id,
+              name: report.name || "Investigation Report",
+              content: report.content,
+              geolocations: report.geolocations,
+              references: report.sources,
+            });
+          } catch (err) {
+            reject(err);
+          }
+        }
+        
+        if (data.status === "error") {
+          socket.close();
+          reject(new Error(data.message || "Backend process error"));
+        }
+      });
+  
+      // Handle WebSocket connection failure
+      socket.onerror = (err) => {
+        console.error("WebSocket failed to connect:", err);
+        reject(new Error("Failed to establish real-time connection to investigation engine."));
+      };
+  
+      // Handle user cancellation
+      investigateAbortRef.current?.signal?.addEventListener("abort", () => {
+        socket.close();
+        reject(new Error("Investigation cancelled"));
+      });
+    });
   }, []);
 
   const transport = useCallback<NonNullable<UseChatOptions["transport"]>>(
@@ -225,6 +262,16 @@ export const ChatInterface = () => {
         toast.success("Investigation saved to case files");
         return [];
       } catch (err: unknown) {
+        if (axios.isCancel(err)) {  
+          const id = createMessageId();
+          return [
+            {
+              id,
+              role: "assistant" as const,
+              content: "Investigation cancelled.",
+            },
+          ];
+        }
         const message = getInvestigationErrorMessage(err);
         toast.error("Investigation failed: " + message);
         const id = createMessageId();
@@ -236,6 +283,8 @@ export const ChatInterface = () => {
           },
         ];
       } finally {
+        investigateAbortRef.current = null;
+        setActiveTaskId(null);
         setLoadingStages([]);
       }
     },
