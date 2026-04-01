@@ -1,12 +1,8 @@
 import os
-import asyncio
-from langchain_core.messages import HumanMessage
-from langchain_mcp_adapters.client import MultiServerMCPClient
-from langchain.agents import create_agent
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.tools import tool, BaseTool
+from langchain_core.tools import tool
 from dotenv import load_dotenv
 from asknews_sdk import AskNewsSDK
+from typing import TypedDict
 
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -16,6 +12,28 @@ ASKNEWS_API_KEY = os.getenv("ASKNEWS_API_KEY")
 _client = AskNewsSDK(api_key=ASKNEWS_API_KEY)
 
 
+def _to_unix(pub_date) -> int:
+    """Convert pub_date to a unix timestamp int, handling datetime objects and raw ints."""
+    if pub_date is None:
+        return 0
+    if isinstance(pub_date, (int, float)):
+        return int(pub_date)
+    return int(pub_date.timestamp())
+
+
+class Article(TypedDict):
+    id_article: int
+    id_site: int
+    header: str
+    summary: str
+    url: str
+    unix_timestamp: int
+    language: str
+    countrycode: str
+    site_rank_global: int
+    content: str
+
+
 @tool
 def search_asknews(
     query: str,
@@ -23,15 +41,16 @@ def search_asknews(
     categories: list[str] = [],
     start_timestamp: int = None,
     end_timestamp: int = None,
-) -> list[dict]:
+) -> list[Article]:
     """Search AskNews for recent news articles relevant to a query.
 
     Args:
         query: The search query string.
-        n_articles: Number of articles to return (default 10).
+        n_articles: Number of articles to return (default 20).
 
     Returns:
-        A list of article dicts with keys: title, summary, url, source, published_at.
+        A list of Article objects with keys: header, summary, content, url,
+        unix_timestamp, language, countrycode, site_rank_global.
     """
     response = _client.news.search_news(
         query=query,
@@ -39,15 +58,21 @@ def search_asknews(
         return_type="both",  # returns both string and Article objects
     )
 
-    results = []
+    results: list[Article] = []
     for article in response.as_dicts:
         results.append(
-            {
-                "title": article.title,
-                "language": article.language,
-                "url": article.article_url,
-                "countrycode": article.country,
-            }
+            Article(
+                id_article=getattr(article, "article_id", 0) or 0,
+                id_site=getattr(article, "source_id", 0) or 0,
+                header=getattr(article, "title", "") or "",
+                summary=getattr(article, "summary", "") or "",
+                content=getattr(article, "article_content", "") or getattr(article, "body", "") or "",
+                url=getattr(article, "article_url", "") or "",
+                unix_timestamp=_to_unix(getattr(article, "pub_date", None)),
+                language=getattr(article, "language", "") or "",
+                countrycode=getattr(article, "country", "") or "",
+                site_rank_global=getattr(article, "rank_score", 0) or 0,
+            )
         )
 
     return results
