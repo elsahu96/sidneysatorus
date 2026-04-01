@@ -167,7 +167,7 @@ const CaseDetail = () => {
                       if (finalReport?.isReport) {
                         setExportingPdf(true);
                         try {
-                          const report = await apiClient.getReport(caseFile.caseNumber);
+                          const report = await apiClient.report.getReport(caseFile.caseNumber);
                           exportReportMetadataToPDF(report);
                           toast.success("Report exported to PDF");
                         } catch {

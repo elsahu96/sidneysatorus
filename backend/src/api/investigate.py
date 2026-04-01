@@ -1,3 +1,6 @@
+import logging
+import multiprocessing
+import uuid
 import asyncio
 import logging
 import os
@@ -7,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -24,7 +28,9 @@ logger = logging.getLogger(__name__)
 _active: dict[str, asyncio.subprocess.Process] = {}
 
 # Path to the runner script (same Python interpreter, same working directory)
-_RUNNER = str(Path(__file__).resolve().parents[2] / "src" / "service" / "investigate_runner.py")
+_RUNNER = str(
+    Path(__file__).resolve().parents[2] / "src" / "service" / "investigate_runner.py"
+)
 
 
 class InvestigateRequest(BaseModel):
@@ -46,9 +52,12 @@ async def investigate(
         raise HTTPException(status_code=400, detail="Query cannot be empty")
 
     proc = await asyncio.create_subprocess_exec(
-        sys.executable, _RUNNER,
-        "--query", query,
-        "--thread-id", thread_id,
+        sys.executable,
+        _RUNNER,
+        "--query",
+        query,
+        "--thread-id",
+        thread_id,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
@@ -66,22 +75,31 @@ async def investigate(
 
     if proc.returncode != 0:
         err = stderr.decode(errors="replace").strip()
-        logger.error("Investigation subprocess failed thread_id=%s: %s", thread_id, err[-500:])
-        raise HTTPException(status_code=500, detail="Writer agent did not produce output files")
+        logger.error(
+            "Investigation subprocess failed thread_id=%s: %s", thread_id, err[-500:]
+        )
+        raise HTTPException(
+            status_code=500, detail="Writer agent did not produce output files"
+        )
 
     # The runner prints diagnostics then the json_path as the final line
     raw_stdout = stdout.decode().strip()
     result = raw_stdout.split("\n")[-1].strip()
     if not result:
-        raise HTTPException(status_code=500, detail="Writer agent did not produce output files")
+        raise HTTPException(
+            status_code=500, detail="Writer agent did not produce output files"
+        )
 
     report_id = result.split("/")[-1].split(".")[0]
-    logger.info("POST /investigate done report_id=%s thread_id=%s", report_id, thread_id)
+    logger.info(
+        "POST /investigate done report_id=%s thread_id=%s", report_id, thread_id
+    )
 
     # Upload report JSON to GCS if configured — stored under the user's UID folder
     if os.getenv("STORAGE_BACKEND") == "gcs":
         try:
             from src.storage_factory import GCSDocumentStorage
+
             gcs_bucket = os.getenv("GCS_BUCKET", "")
             report_path = Path(result)
             if gcs_bucket and report_path.exists():
@@ -94,7 +112,9 @@ async def investigate(
                 )
                 logger.info("Uploaded report to GCS: %s", gcs_path)
         except Exception:
-            logger.exception("Failed to upload report to GCS for report_id=%s", report_id)
+            logger.exception(
+                "Failed to upload report to GCS for report_id=%s", report_id
+            )
 
     try:
         db = await factory.relational.get_client()
@@ -127,6 +147,10 @@ async def investigate(
 async def cancel_investigation(thread_id: str, user=Depends(verify_token)):
     proc = _active.get(thread_id)
     if not proc:
-        raise HTTPException(status_code=404, detail="No active investigation with that ID")
+        raise HTTPException(
+            status_code=404, detail="No active investigation with that ID"
+        )
     proc.kill()
-    logger.info("Sent SIGKILL to investigation thread_id=%s uid=%s", thread_id, user["uid"])
+    logger.info(
+        "Sent SIGKILL to investigation thread_id=%s uid=%s", thread_id, user["uid"]
+    )

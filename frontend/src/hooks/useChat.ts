@@ -45,7 +45,10 @@ function loadPersistedMessages(threadId: string): Message[] | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_PREFIX + threadId);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as { messages?: unknown; updatedAt?: number };
+    const parsed = JSON.parse(raw) as {
+      messages?: unknown;
+      updatedAt?: number;
+    };
     if (!parsed?.messages || !Array.isArray(parsed.messages)) return null;
     const validated = parseAgUiPacketSafe(parsed.messages);
     return validated ?? null;
@@ -58,7 +61,7 @@ function savePersistedMessages(threadId: string, messages: Message[]): void {
   try {
     localStorage.setItem(
       STORAGE_KEY_PREFIX + threadId,
-      JSON.stringify({ messages, updatedAt: Date.now() })
+      JSON.stringify({ messages, updatedAt: Date.now() }),
     );
   } catch {
     // ignore storage errors
@@ -120,7 +123,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         }
       }
     },
-    [persist]
+    [persist],
   );
 
   const sendMessage = useCallback(
@@ -150,7 +153,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           ? result
           : parseAgUiPacketSafe(result);
         if (newMessages == null) {
-          setError("Invalid AG-UI response: no messages returned");
+          setError("No messages returned");
           setStatus("error");
         } else {
           if (newMessages.length > 0) {
@@ -164,7 +167,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         setStatus("error");
       }
     },
-    [threadId, messages, transport, persist]
+    [threadId, messages, transport, persist],
   );
 
   return {

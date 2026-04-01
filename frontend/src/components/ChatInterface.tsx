@@ -76,11 +76,6 @@ interface PendingApiReport {
   duration: number;
 }
 
-function isRequestCancelled(err: unknown): boolean {
-  if (!axios.isAxiosError(err)) return false;
-  return err.code === "ERR_CANCELED";
-}
-
 function getInvestigationErrorMessage(err: unknown): string {
   if (axios.isAxiosError(err)) {
     const detail = err.response?.data?.detail;
@@ -91,7 +86,7 @@ function getInvestigationErrorMessage(err: unknown): string {
       typeof err.response?.data === "string" &&
       /<!doctype html>|<html/i.test(err.response.data)
     ) {
-      return `API returned HTML instead of JSON. Check VITE_API_URL (${API_BASE_URL}) and ensure backend is running.`;
+      return `API returned HTML instead of JSON. Check VITE_API_URL (${import.meta.env.VITE_API_URL}) and ensure backend is running.`;
     }
     if (typeof err.response?.data === "string" && err.response.data.trim()) {
       return err.response.data;
@@ -123,8 +118,11 @@ export const ChatInterface = () => {
   const location = useLocation();
   const { addCaseFile } = useCaseFiles();
 
-  const performInvestigationApi = useCallback(async (query: string, signal?: AbortSignal) => {
-    const reportMeta = await apiClient.investigate.start(query, { signal });
+  const performInvestigationApi = useCallback(async (query: string) => {
+    const threadId = crypto.randomUUID();
+    activeThreadId.current = threadId;
+    const reportMeta = await apiClient.investigate.start(query, { signal: investigateAbortRef.current?.signal });
+    activeThreadId.current = null;
     if (!reportMeta?.id) {
       throw new Error("Investigation returned no report ID");
     }
@@ -166,7 +164,7 @@ export const ChatInterface = () => {
       };
 
       // Handle user cancellation
-      signal?.addEventListener("abort", () => {
+      investigateAbortRef.current?.signal?.addEventListener("abort", () => {
         socket.close();
         reject(new Error("Investigation cancelled"));
       });
@@ -217,9 +215,8 @@ export const ChatInterface = () => {
           return [{ id, role: "assistant" as const, content: "Roman Abramovich" }];
         }
 
-        investigateAbortRef.current?.abort();
-        investigateAbortRef.current = new AbortController();
-        const result = await performInvestigationApi(content, investigateAbortRef.current.signal);
+
+        const result = await performInvestigationApi(content);
         const capturedDuration = elapsedRef.current;
 
         // Show the report immediately — don't wait for transport to finish
@@ -265,7 +262,7 @@ export const ChatInterface = () => {
         toast.success("Investigation saved to case files");
         return [];
       } catch (err: unknown) {
-        if (isRequestCancelled(err)) {
+        if (axios.isCancel(err)) {  
           const id = createMessageId();
           return [
             {
@@ -298,22 +295,6 @@ export const ChatInterface = () => {
   const { messages, status, error, sendMessage, clearError, reset } = chat;
   const [input, setInput] = useState("");
   const isLoading = status === "loading";
-
-  const handleCancelInvestigation = useCallback(async () => {
-    investigateAbortRef.current?.abort();
-
-    if (activeTaskId) {
-      try {
-        await apiClient.investigate.terminate(activeTaskId);
-        toast.success("Investigation process terminated.");
-      } catch (err) {
-        console.error("Backend termination failed:", err);
-      } finally {
-        setActiveTaskId(null);
-        setLoadingStages([]);
-      }
-    }
-  }, [activeTaskId]);
 
   // Progress bar timer
   useEffect(() => {
@@ -561,7 +542,6 @@ export const ChatInterface = () => {
                   type="button"
                   onClick={handleStop}
                   className="absolute right-3 bottom-3 rounded-md p-1.5 text-destructive hover:bg-destructive/10 transition-all duration-150"
-                  aria-label="Cancel investigation"
                   title="Stop investigation"
                 >
                   <Square className="h-4 w-4 fill-current" />
@@ -718,7 +698,6 @@ export const ChatInterface = () => {
                     type="button"
                     onClick={handleStop}
                     className="absolute right-3 bottom-3 rounded-md p-1.5 text-destructive hover:bg-destructive/10 transition-all duration-150"
-                    aria-label="Cancel investigation"
                     title="Stop investigation"
                   >
                     <Square className="h-4 w-4 fill-current" />
