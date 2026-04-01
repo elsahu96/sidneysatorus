@@ -131,10 +131,10 @@ export const ChatInterface = () => {
     // 2. Use Promise to wrap the WebSocket waiting process
     return new Promise((resolve, reject) => {
       console.log("Initiating WebSocket connection...");
-      
+
       const socket = apiClient.investigate.connectStatus(reportMeta.id, async (data) => {
         console.log("WS Message received:", data);
-        
+
         if (data.status === "completed") {
           socket.close();
           try {
@@ -150,19 +150,19 @@ export const ChatInterface = () => {
             reject(err);
           }
         }
-        
+
         if (data.status === "error") {
           socket.close();
           reject(new Error(data.message || "Backend process error"));
         }
       });
-  
+
       // Handle WebSocket connection failure
       socket.onerror = (err) => {
         console.error("WebSocket failed to connect:", err);
         reject(new Error("Failed to establish real-time connection to investigation engine."));
       };
-  
+
       // Handle user cancellation
       investigateAbortRef.current?.signal?.addEventListener("abort", () => {
         socket.close();
@@ -388,14 +388,14 @@ export const ChatInterface = () => {
       const accountSelectionDuration = Math.round((Date.now() - accountSelectionStart) / 1000);
       setLoadingStages([]);
       const id = createMessageId();
-      
+
       const caseFileMessages: CaseFile["messages"] = messages
         .filter((m) => m.role === "user" || m.role === "assistant")
         .map((m) => ({
           role: m.role as "user" | "assistant",
           content: typeof m.content === "string" ? m.content : "",
         }));
-      
+
       toast.success("Investigation saved to case files");
     },
     [messages, addCaseFile]
@@ -412,14 +412,11 @@ export const ChatInterface = () => {
   }, [reset]);
 
   const handleStop = useCallback(() => {
-    if (activeThreadId.current) {
-      apiClient.cancelInvestigation(activeThreadId.current);
-      activeThreadId.current = null;
-    }
+    handleCancelInvestigation();
     reset();
     setLoadingStages([]);
     toast.info("Investigation stopped");
-  }, [reset]);
+  }, [handleCancelInvestigation, reset]);
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);

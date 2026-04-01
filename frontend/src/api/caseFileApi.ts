@@ -1,6 +1,8 @@
+import { api } from "./client";
+
 export const caseFileApi = {
-  fetchCaseFiles: (): Promise<{ caseFiles: unknown[] }> =>
-    Promise.resolve({ caseFiles: [] }),
+  fetchCaseFiles: () =>
+    api.get<{ cases: unknown[] }>("/cases/").then((r) => ({ caseFiles: r.data.cases })),
 
   createCaseFile: (payload: {
     caseNumber: string;
@@ -9,17 +11,17 @@ export const caseFileApi = {
     category?: string | null;
     projectId?: string | null;
     messages: unknown[];
-  }): Promise<unknown> =>
-    Promise.resolve({
-      id: crypto.randomUUID(),
-      caseNumber: payload.caseNumber,
-      subject: payload.subject,
-      timestamp: Date.now(),
-      folderId: payload.folderId ?? null,
-      category: payload.category ?? null,
-      projectId: payload.projectId ?? null,
-      messages: payload.messages,
-    }),
+  }) =>
+    api
+      .post("/cases/", {
+        subject: payload.subject,
+        case_number: payload.caseNumber,
+        folder_id: payload.folderId ?? null,
+        category: payload.category ?? null,
+        project_id: payload.projectId ?? null,
+        messages: payload.messages,
+      })
+      .then((r) => r.data),
 
   updateCaseFile: (
     id: string,
@@ -31,17 +33,17 @@ export const caseFileApi = {
       projectId?: string;
       messages?: unknown[];
     },
-  ): Promise<unknown> =>
-    Promise.resolve({
-      id,
-      caseNumber: payload.caseNumber ?? "",
-      subject: payload.subject ?? "",
-      timestamp: Date.now(),
-      folderId: payload.folderId ?? null,
-      category: payload.category ?? null,
-      projectId: payload.projectId ?? null,
-      messages: payload.messages ?? [],
-    }),
+  ) =>
+    api
+      .patch(`/cases/${id}`, {
+        subject: payload.subject,
+        case_number: payload.caseNumber,
+        folder_id: payload.folderId,
+        category: payload.category,
+        project_id: payload.projectId,
+        messages: payload.messages,
+      })
+      .then((r) => r.data),
 
-  deleteCaseFile: (_id: string): Promise<void> => Promise.resolve(),
+  deleteCaseFile: (id: string) => api.delete(`/cases/${id}`).then(() => {}),
 };

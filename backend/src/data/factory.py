@@ -34,17 +34,20 @@ class DataFactory:
     def __init__(self) -> None:
         self._relational = RelationalDB()
 
+        qdrant_url = os.environ.get("QDRANT_URL")
         self._vector = VectorDB(
-            url=os.environ["QDRANT_URL"],
+            url=qdrant_url or "",
             api_key=os.environ.get("QDRANT_API_KEY"),
-        )
+        ) if qdrant_url else None
 
+        es_url = os.environ.get("ELASTICSEARCH_URL")
         self._search = SearchDB(
-            url=os.environ["ELASTICSEARCH_URL"],
+            url=es_url or "",
             api_key=os.environ.get("ELASTICSEARCH_API_KEY"),
-        )
+        ) if es_url else None
 
-        self._cache = CacheDB(url=os.environ["REDIS_URL"])
+        redis_url = os.environ.get("REDIS_URL")
+        self._cache = CacheDB(url=redis_url) if redis_url else None
 
     # ── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -62,6 +65,9 @@ class DataFactory:
             ("search", self._search),
             ("cache", self._cache),
         ]:
+            if client is None:
+                logger.info("DataFactory: %s not configured — skipping", name)
+                continue
             try:
                 await client.connect()
                 logger.info("DataFactory: %s connected", name)
@@ -76,6 +82,8 @@ class DataFactory:
             ("search", self._search),
             ("cache", self._cache),
         ]:
+            if client is None:
+                continue
             try:
                 await client.disconnect()
             except Exception as exc:
@@ -89,15 +97,15 @@ class DataFactory:
         return self._relational
 
     @property
-    def vector(self) -> VectorDB:
+    def vector(self) -> "VectorDB | None":
         return self._vector
 
     @property
-    def search(self) -> SearchDB:
+    def search(self) -> "SearchDB | None":
         return self._search
 
     @property
-    def cache(self) -> CacheDB:
+    def cache(self) -> "CacheDB | None":
         return self._cache
 
 

@@ -24,10 +24,6 @@ COPY pyproject.toml uv.lock ./
 # Install Python dependencies (no dev extras, no editable install)
 RUN uv sync --no-dev --no-editable
 
-# spaCy download uses pip internally; uv's venv does not include pip unless we add it
-RUN uv pip install pip \
-    && python -m spacy download en_core_web_trf
-
 # Copy the rest of the application code
 COPY . .
 

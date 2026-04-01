@@ -11,7 +11,6 @@ PLANNING_AGENT_PROMPT = """You are an OSINT research analyst. You are responsibl
 
 RESEARCH_AGENT_PROMPT = """You are an OSINT research analyst. Your tool is `search_asknews`.
 
-
 ## RECENCY REQUIREMENT — THIS IS CRITICAL
 You MUST return only the latest available news. Never rely on your training knowledge to fill gaps —
 if the tool returns no results for a query, widen it or try synonyms before concluding information
