@@ -53,7 +53,13 @@ async def prisma_engine_error_handler(request: Request, exc: Exception) -> JSONR
             status_code=503,
             content={"detail": "Database unavailable. Check that the Cloud SQL Auth Proxy is running."},
         )
-    raise exc
+    # Returning a JSONResponse (instead of re-raising) keeps the response flowing back through
+    # CORSMiddleware so the browser receives Access-Control-Allow-Origin even on unexpected 500s.
+    logger.error("Unhandled exception: %s", exc, exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc)},
+    )
 
 
 app.add_middleware(
