@@ -143,11 +143,13 @@ jobs:
             --region="${REGION}" \
             --project="${PROJECT_ID}" \
             --image="${BACKEND_IMAGE}"
+          # Must match nginx (listen 8080) and Terraform; if the service was ever set to 4567 (Vite dev port), probes fail.
           echo "Deploying frontend → ${CLOUD_RUN_FRONTEND_SERVICE}"
           gcloud run services update "${CLOUD_RUN_FRONTEND_SERVICE}" \
             --region="${REGION}" \
             --project="${PROJECT_ID}" \
-            --image="${FRONTEND_IMAGE}"
+            --image="${FRONTEND_IMAGE}" \
+            --port=8080
 
       - name: Summary
         run: |
