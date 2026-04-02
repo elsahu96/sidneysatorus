@@ -19,7 +19,11 @@ from firebase_admin import credentials
 
 logger = logging.getLogger(__name__)
 
-_FRONTEND_URL = os.getenv("FRONTEND_URL") or "http://localhost:4567"
+
+def _cors_allow_origins() -> list[str]:
+    """CORS origins from FRONTEND_URL (comma-separated for multiple Cloud Run hostnames)."""
+    raw = os.getenv("FRONTEND_URL") or "http://localhost:4567"
+    return [o.strip() for o in raw.split(",") if o.strip()]
 
 # On Cloud Run: GOOGLE_APPLICATION_CREDENTIALS is not set — use ADC (the revision's service account).
 # Locally: point GOOGLE_APPLICATION_CREDENTIALS at your Firebase service-account JSON and it is used instead.
@@ -54,7 +58,7 @@ async def prisma_engine_error_handler(request: Request, exc: Exception) -> JSONR
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[_FRONTEND_URL],
+    allow_origins=_cors_allow_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
