@@ -11,8 +11,9 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from prisma import Prisma
 from src.service.auth import verify_token
-from src.deps import get_data_factory, DataFactory
+from src.deps import get_data_factory, DataFactory, get_db
 from src.service.db import (
     get_or_create_team_for_user,
     create_case_file,
@@ -24,14 +25,6 @@ from src.service.db import (
 
 app = APIRouter(prefix="/cases", tags=["cases"])
 logger = logging.getLogger(__name__)
-
-
-async def _resolve_team(user: dict, factory: DataFactory) -> str:
-    return await get_or_create_team_for_user(
-        await factory.relational.get_client(),
-        firebase_uid=user["uid"],
-        email=user["email"],
-    )
 
 
 class CreateCaseRequest(BaseModel):
@@ -56,15 +49,10 @@ async def list_cases(
     folder_id: str | None = None,
     project_id: str | None = None,
     user=Depends(verify_token),
-    factory: DataFactory = Depends(get_data_factory),
+    db: Prisma = Depends(get_db),
 ):
-    team_id = await _resolve_team(user, factory)
-    cases = await list_case_files(
-        factory.relational.client,
-        team_id=team_id,
-        folder_id=folder_id,
-        project_id=project_id,
-    )
+    team_id = await get_or_create_team_for_user(db, firebase_uid=user["uid"], email=user["email"])
+    cases = await list_case_files(db, team_id=team_id, folder_id=folder_id, project_id=project_id)
     return {"cases": cases}
 
 
@@ -72,11 +60,11 @@ async def list_cases(
 async def create_case(
     body: CreateCaseRequest,
     user=Depends(verify_token),
-    factory: DataFactory = Depends(get_data_factory),
+    db: Prisma = Depends(get_db),
 ):
-    team_id = await _resolve_team(user, factory)
+    team_id = await get_or_create_team_for_user(db, firebase_uid=user["uid"], email=user["email"])
     case = await create_case_file(
-        factory.relational.client,
+        db,
         team_id=team_id,
         subject=body.subject,
         messages=body.messages,
@@ -91,10 +79,10 @@ async def create_case(
 async def get_case(
     case_id: str,
     user=Depends(verify_token),
-    factory: DataFactory = Depends(get_data_factory),
+    db: Prisma = Depends(get_db),
 ):
-    team_id = await _resolve_team(user, factory)
-    case = await get_case_file(factory.relational.client, case_id)
+    team_id = await get_or_create_team_for_user(db, firebase_uid=user["uid"], email=user["email"])
+    case = await get_case_file(db, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     if case["teamId"] != team_id:
@@ -107,16 +95,16 @@ async def update_case(
     case_id: str,
     body: UpdateCaseRequest,
     user=Depends(verify_token),
-    factory: DataFactory = Depends(get_data_factory),
+    db: Prisma = Depends(get_db),
 ):
-    team_id = await _resolve_team(user, factory)
-    case = await get_case_file(factory.relational.client, case_id)
+    team_id = await get_or_create_team_for_user(db, firebase_uid=user["uid"], email=user["email"])
+    case = await get_case_file(db, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     if case["teamId"] != team_id:
         raise HTTPException(status_code=403, detail="Access denied")
     updated = await update_case_file(
-        factory.relational.client,
+        db,
         case_id=case_id,
         subject=body.subject,
         case_number=body.case_number,
@@ -132,12 +120,12 @@ async def update_case(
 async def delete_case(
     case_id: str,
     user=Depends(verify_token),
-    factory: DataFactory = Depends(get_data_factory),
+    db: Prisma = Depends(get_db),
 ):
-    team_id = await _resolve_team(user, factory)
-    case = await get_case_file(factory.relational.client, case_id)
+    team_id = await get_or_create_team_for_user(db, firebase_uid=user["uid"], email=user["email"])
+    case = await get_case_file(db, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     if case["teamId"] != team_id:
         raise HTTPException(status_code=403, detail="Access denied")
-    await delete_case_file(factory.relational.client, case_id)
+    await delete_case_file(db, case_id)

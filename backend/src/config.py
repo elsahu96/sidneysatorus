@@ -24,7 +24,6 @@ load_dotenv()
 # settings = get_settings()
 
 
-# 依赖注入 — 切换后端只改这里
 def get_storage_service():
     storage_backend = os.getenv("STORAGE_BACKEND")
     gcs_bucket = os.getenv("GCS_BUCKET", "")

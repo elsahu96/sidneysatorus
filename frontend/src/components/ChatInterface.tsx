@@ -412,11 +412,11 @@ export const ChatInterface = () => {
   }, [reset]);
 
   const handleStop = useCallback(() => {
-    handleCancelInvestigation();
+    investigateAbortRef.current?.abort();
     reset();
     setLoadingStages([]);
     toast.info("Investigation stopped");
-  }, [handleCancelInvestigation, reset]);
+  }, [reset]);
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);

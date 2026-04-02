@@ -3,10 +3,11 @@ Relational database client — PostgreSQL via Prisma ORM.
 """
 
 import logging
+from dotenv import load_dotenv
 from prisma import Prisma
 
 logger = logging.getLogger(__name__)
-
+load_dotenv()
 
 class RelationalDB:
     """Wraps the Prisma client with explicit connect/disconnect lifecycle."""

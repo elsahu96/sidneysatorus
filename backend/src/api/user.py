@@ -10,8 +10,9 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 import firebase_admin
 from firebase_admin import tenant_mgt
 from firebase_admin import credentials, auth as admin_auth
+from prisma import Prisma
 from src.service.auth import verify_token
-from src.deps import get_data_factory, DataFactory
+from src.deps import get_db
 from src.service.db import create_or_get_user, create_team_with_owner, get_teams_for_user
 from firebase_admin._auth_utils import EmailAlreadyExistsError
 
@@ -42,7 +43,7 @@ def _create_firebase_user(email: str, password: str, tenant_id: str) -> str:
 async def register(
     request: Request,
     body: RegisterRequest,
-    factory: DataFactory = Depends(get_data_factory),
+    db: Prisma = Depends(get_db),
 ):
     logger.info("Registering user email=%s tenant=%s", body.email, body.tenantId)
     try:
@@ -54,7 +55,6 @@ async def register(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    db = factory.relational.client
     user = await create_or_get_user(db, firebase_uid=uid, email=body.email)
     team = await create_team_with_owner(db, team_name=f"{body.email}'s Team", owner_id=user["id"])
 
@@ -64,10 +64,9 @@ async def register(
 @app.get("/profile")
 async def get_profile(
     user=Depends(verify_token),
-    factory: DataFactory = Depends(get_data_factory),
+    db: Prisma = Depends(get_db),
 ):
     logger.info("Getting profile for user: %s", user["uid"])
-    db = factory.relational.client
     db_user = await create_or_get_user(db, firebase_uid=user["uid"], email=user["email"])
     teams = await get_teams_for_user(db, db_user["id"])
     return {
@@ -82,9 +81,8 @@ async def get_profile(
 @app.get("/teams")
 async def get_teams(
     user=Depends(verify_token),
-    factory: DataFactory = Depends(get_data_factory),
+    db: Prisma = Depends(get_db),
 ):
-    db = factory.relational.client
     db_user = await create_or_get_user(db, firebase_uid=user["uid"], email=user["email"])
     teams = await get_teams_for_user(db, db_user["id"])
     return {"teams": teams}

@@ -1,18 +1,21 @@
 """
 Shared FastAPI dependencies.
 Defined here to avoid circular imports between main and routers.
-
-Primary dependency for data access:
-
-    from src.deps import get_data_factory, DataFactory
-
-    @router.get("/example")
-    async def example(factory: DataFactory = Depends(get_data_factory)):
-        user = await factory.relational.client.user.find_unique(...)
-        cached = await factory.cache.get("key")
-        ...
 """
 
+from fastapi import Depends, HTTPException
+from prisma import Prisma
 from src.data import DataFactory, get_data_factory
 
-__all__ = ["DataFactory", "get_data_factory"]
+
+async def get_db(factory: DataFactory = Depends(get_data_factory)) -> Prisma:
+    """Return a connected Prisma client, connecting lazily if needed."""
+    try:
+        return await factory.relational.get_client()
+    except Exception as exc:
+        if "EngineConnectionError" in type(exc).__name__ or "ConnectError" in str(exc):
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        raise
+
+
+__all__ = ["DataFactory", "get_data_factory", "get_db"]
