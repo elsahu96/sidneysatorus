@@ -34,4 +34,4 @@ RUN prisma generate --schema=prisma/schema.prisma
 # Expose the port the app runs on (default 8080; override at run time with -e PORT=3000)
 EXPOSE ${PORT}
 
-CMD ["python", "run.py"]
+CMD ["sh", "-c", "prisma migrate deploy --schema=prisma/schema.prisma && python run.py"]
