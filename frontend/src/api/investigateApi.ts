@@ -25,11 +25,9 @@ export const investigateApi = {
     api.get(`/status/${taskId}`).then((r) => r.data),
 
   connectStatus: (taskId: string, onMessage: (data: any) => void) => {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-
-    const host = window.location.host;
-
-    // Construct the URL. Note: if you use Vite proxy, the path prefix must match vite.config.ts
+    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8080";
+    const protocol = apiUrl.startsWith("https") ? "wss:" : "ws:";
+    const host = apiUrl.replace(/^https?:\/\//, "");
     const wsUrl = `${protocol}//${host}/ws/${taskId}`;
     console.log("Connecting to WS:", wsUrl);
 
