@@ -22,6 +22,178 @@ import { createMessageId } from "@/services/chatService";
 import type { Message as AgUiMessage } from "@/types/chat";
 import type { ChatRunInput } from "@/services/chatService";
 
+const STAGE_POOLS: Record<string, string[]> = {
+  "planning-agent": [
+    "Structuring analytical findings",
+    "Mapping query parameters",
+    "Identifying key entities",
+    "Generating investigation plan",
+    "Preparing search strategy",
+    "Ordering findings by significance",
+    "Drafting key judgements",
+  ],
+  "research-agent": [
+    "Geocoding identified locations",
+    "Plotting AIS position history",
+    "Layering port and terminal data",
+    "Overlaying sanctions zone perimeters",
+    "Tracing cross-border movement patterns",
+    "Rendering geographic overlay",
+    "Calculating transit corridors",
+    "Projecting maritime waypoints",
+    "Rendering ship-to-ship transfer zones",
+    "Mapping chokepoint proximity",
+    "Layering conflict and risk zones",
+    "Georeferencing source locations",
+    "Assembling geospatial intelligence layer",
+    "Mapping jurisdictional boundaries",
+    "Pinning key facilities and infrastructure",
+    "Plotting entity coordinates",
+    "Mapping route trajectories",
+    "Projecting overland transit routes",
+    "Assembling satellite imagery tiles",
+    "Layering customs and port authority zones",
+    "Rendering pipeline and energy infrastructure",
+    "Mapping diplomatic and consular footprints",
+    "Plotting airfield and logistics hubs",
+    "Overlaying territorial control boundaries",
+    "Calibrating route animation sequences",
+  ],
+  "asknews-agent": [
+    "Geocoding identified locations",
+    "Plotting AIS position history",
+    "Layering port and terminal data",
+    "Overlaying sanctions zone perimeters",
+    "Tracing cross-border movement patterns",
+    "Assembling geospatial intelligence layer",
+    "Mapping jurisdictional boundaries",
+    "Rendering final intelligence map",
+  ],
+  "writer-agent": [
+    "Synthesis",
+    "Structuring analytical findings",
+    "Generating executive summary",
+    "Compiling source references",
+    "Formatting report output",
+    "Synchronising findings",
+    "Preparing final assessment",
+    "Assembling visual overlays",
+    "Drafting key judgements",
+    "Writing analytical commentary",
+    "Applying confidence ratings to assessments",
+    "Generating analyst flags and warnings",
+    "Compiling entity reference index",
+    "Intelligence report generation",
+    "Compiling final intelligence product",
+    "Running quality assurance checks",
+    "Validating report completeness",
+    "Checking citation integrity",
+    "Verifying grading consistency",
+    "Generating downloadable formats",
+    "Delivering intelligence assessment",
+  ],
+};
+
+/** Inline HITL review card — shown in the chat stream, not as an overlay. */
+const HitlInlineCard = ({
+  hitlState,
+  hitlEditedContent,
+  setHitlEditedContent,
+  hitlAdditionalUrls,
+  setHitlAdditionalUrls,
+  onApprove,
+  onReject,
+  className = "",
+}: {
+  hitlState: {
+    agent: string;
+    content_type?: string;
+    content?: string;
+    sources?: { title: string; url: string; summary: string }[];
+    editable?: boolean;
+  };
+  hitlEditedContent: string;
+  setHitlEditedContent: (v: string) => void;
+  hitlAdditionalUrls: string;
+  setHitlAdditionalUrls: (v: string) => void;
+  onApprove: () => void;
+  onReject: () => void;
+  className?: string;
+}) => (
+  <div className={`rounded-lg border bg-card shadow-sm flex flex-col ${className}`}>
+    {/* Header */}
+    <div className="px-5 pt-4 pb-3 border-b border-border">
+      <p className="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-0.5">
+        {hitlState.content_type === "plan"
+          ? "Review investigation plan"
+          : hitlState.content_type === "sources"
+            ? "Review research sources"
+            : "Confirm report"}
+      </p>
+      <h3 className="text-sm font-semibold text-foreground">{hitlState.agent}</h3>
+    </div>
+
+    {/* Body */}
+    <div className="px-5 py-4 space-y-3">
+      {hitlState.content_type === "plan" && (
+        <>
+          <p className="text-xs text-muted-foreground">Review the investigation plan below. You can edit it before research begins.</p>
+          <textarea
+            className="w-full min-h-[180px] rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-y font-mono leading-relaxed"
+            value={hitlEditedContent}
+            onChange={(e) => setHitlEditedContent(e.target.value)}
+          />
+        </>
+      )}
+
+      {hitlState.content_type === "sources" && (
+        <>
+          <p className="text-xs text-muted-foreground">
+            {hitlState.sources?.length ?? 0} sources found. Add any additional sources below.
+          </p>
+          {hitlState.sources && hitlState.sources.length > 0 && (
+            <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+              {hitlState.sources.map((src, i) => (
+                <div key={i} className="rounded-md border border-border bg-background/50 px-3 py-2">
+                  <p className="text-xs font-medium text-foreground truncate">{src.title || src.url}</p>
+                  <a href={src.url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline truncate block">
+                    {src.url}
+                  </a>
+                  {src.summary && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{src.summary}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">Add additional source URLs (one per line):</label>
+            <textarea
+              className="w-full h-16 rounded-md border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none font-mono"
+              placeholder={"https://example.com/article\nhttps://..."}
+              value={hitlAdditionalUrls}
+              onChange={(e) => setHitlAdditionalUrls(e.target.value)}
+            />
+          </div>
+        </>
+      )}
+
+      {hitlState.content_type === "format_confirmation" && hitlState.content && (
+        <div className="rounded-md border border-border bg-background/50 px-4 py-3">
+          <pre className="text-sm text-foreground whitespace-pre-wrap font-sans leading-relaxed">{hitlState.content}</pre>
+        </div>
+      )}
+    </div>
+
+    {/* Footer */}
+    <div className="px-5 py-3 border-t border-border flex gap-2 justify-end">
+      <button onClick={onReject} className="px-3 py-1.5 text-sm rounded-md border border-border text-muted-foreground hover:bg-muted transition-colors">
+        Stop
+      </button>
+      <button onClick={onApprove} className="px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+        {hitlState.content_type === "format_confirmation" ? "Write Report" : "Proceed"}
+      </button>
+    </div>
+  </div>
+);
 
 /** Renders the markdown report content returned by the /report/{stem} endpoint. */
 export const InvestigationApiReport = ({
@@ -110,10 +282,45 @@ export const ChatInterface = () => {
   const [reportDuration, setReportDuration] = useState<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const elapsedRef = useRef(0);
+  const estimatedSecsRef = useRef(240);
   const activeThreadId = useRef<string | null>(null);
+
+  const startStageCycling = useCallback((agent: string) => {
+    if (stageCycleRef.current) clearInterval(stageCycleRef.current);
+    const pool = STAGE_POOLS[agent] ?? STAGE_POOLS["research-agent"];
+    stagePoolRef.current = pool;
+    stageIndexRef.current = 0;
+    setLoadingStages([pool[0]]);
+    stageCycleRef.current = setInterval(() => {
+      stageIndexRef.current = (stageIndexRef.current + 1) % pool.length;
+      setLoadingStages([stagePoolRef.current[stageIndexRef.current]]);
+    }, 3500);
+  }, []);
+
+  const stopStageCycling = useCallback(() => {
+    if (stageCycleRef.current) {
+      clearInterval(stageCycleRef.current);
+      stageCycleRef.current = null;
+    }
+  }, []);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const investigateAbortRef = useRef<AbortController | null>(null);
+  const [hitlState, setHitlState] = useState<{
+    agent: string;
+    description: string;
+    threadId: string;
+    content_type?: string;
+    content?: string;
+    sources?: { title: string; url: string; summary: string }[];
+    editable?: boolean;
+  } | null>(null);
+  const [hitlEditedContent, setHitlEditedContent] = useState<string>("");
+  const [hitlAdditionalUrls, setHitlAdditionalUrls] = useState<string>("");
+  const stageCycleRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stagePoolRef = useRef<string[]>([]);
+  const stageIndexRef = useRef(0);
   const navigate = useNavigate();
   const location = useLocation();
   const { addCaseFile } = useCaseFiles();
@@ -128,48 +335,70 @@ export const ChatInterface = () => {
     }
     console.log("ChatInterface: performInvestigationApi: reportMeta:", reportMeta);
     setActiveTaskId(reportMeta.id);
-    // 2. Use Promise to wrap the WebSocket waiting process
     return new Promise((resolve, reject) => {
-      console.log("Initiating WebSocket connection...");
+      console.log("Initiating SSE stream...");
 
-      const socket = apiClient.investigate.connectStatus(reportMeta.id, async (data) => {
-        console.log("WS Message received:", data);
+      const connection = apiClient.investigate.connectStatus(
+        reportMeta.id,
+        async (data) => {
+          console.log("SSE message received:", data);
 
-        if (data.status === "completed") {
-          socket.close();
-          try {
-            const report = await apiClient.investigate.getReport(data.report_id);
-            resolve({
-              id: reportMeta.id,
-              name: report.name || "Investigation Report",
-              content: report.content,
-              geolocations: report.geolocations,
-              references: report.sources,
-            });
-          } catch (err) {
-            reject(err);
+          if (data.type === "progress") {
+            startStageCycling(data.agent);
           }
-        }
 
-        if (data.status === "error") {
-          socket.close();
-          reject(new Error(data.message || "Backend process error"));
-        }
-      });
+          if (data.type === "hitl") {
+            stopStageCycling();
+            setHitlState({
+              agent: data.agent,
+              description: data.description || "",
+              threadId: reportMeta.id,
+              content_type: data.content_type,
+              content: data.content,
+              sources: data.sources,
+              editable: data.editable,
+            });
+            setHitlEditedContent(data.content || "");
+            setHitlAdditionalUrls("");
+          }
 
-      // Handle WebSocket connection failure
-      socket.onerror = (err) => {
-        console.error("WebSocket failed to connect:", err);
-        reject(new Error("Failed to establish real-time connection to investigation engine."));
-      };
+          if (data.type === "completed" || data.status === "completed") {
+            stopStageCycling();
+            setHitlState(null);
+            connection.close();
+            try {
+              const report = await apiClient.investigate.getReport(data.report_id);
+              resolve({
+                id: reportMeta.id,
+                name: report.name || "Investigation Report",
+                content: report.content,
+                geolocations: report.geolocations,
+                references: report.sources,
+              });
+            } catch (err) {
+              reject(err);
+            }
+          }
+
+          if (data.type === "error" || data.status === "error") {
+            stopStageCycling();
+            setHitlState(null);
+            connection.close();
+            reject(new Error(data.detail || data.message || "Backend process error"));
+          }
+        },
+        (err) => {
+          reject(new Error(err.message || "Failed to establish real-time connection to investigation engine."));
+        },
+      );
 
       // Handle user cancellation
       investigateAbortRef.current?.signal?.addEventListener("abort", () => {
-        socket.close();
+        connection.close();
         reject(new Error("Investigation cancelled"));
       });
     });
-  }, []);
+  }, [startStageCycling, stopStageCycling]);
 
   const transport = useCallback<NonNullable<UseChatOptions["transport"]>>(
     async (input: ChatRunInput) => {
@@ -177,6 +406,10 @@ export const ChatInterface = () => {
       const content =
         typeof lastUser?.content === "string" ? lastUser.content.trim() : "";
       if (!content) return [];
+
+      // Estimate duration from word count: base 180s + 12s/word, clamped 120–480s
+      const wordCount = content.split(/\s+/).filter(Boolean).length;
+      estimatedSecsRef.current = Math.min(Math.max(180 + wordCount * 12, 120), 480);
 
       setLoadingStages([
         "Understanding request",
@@ -216,23 +449,22 @@ export const ChatInterface = () => {
         }
 
 
-        const result = await performInvestigationApi(content);
+        const result = await performInvestigationApi(content) as { id: string; name: string; content: string; geolocations: any[]; references: any[] };
         const capturedDuration = elapsedRef.current;
-
-        // Show the report immediately — don't wait for transport to finish
         setReportDuration(capturedDuration);
-        setEstimatedSeconds(0);
-        setLoadingStages([]);
-        setPendingApiReports((prev) => [
+
+        // Inject the report as an assistant message so it lands in the correct
+        // position in the chat stream (directly after the user's query).
+        const reportMsgId = createMessageId();
+        setAttachmentByMessageId((prev) => ({
           ...prev,
-          {
-            id: createMessageId(),
-            content: result.content,
-            geolocations: result.geolocations,
-            references: result.references,
-            duration: capturedDuration,
+          [reportMsgId]: {
+            isInvestigationApiReport: true,
+            reportContent: result.content,
+            geolocations: result.geolocations || [],
+            references: result.references || [],
           },
-        ]);
+        }));
 
         // Save to case files in the background (non-blocking for the user)
         const caseFileMessages: CaseFile["messages"] = input.messages
@@ -260,7 +492,7 @@ export const ChatInterface = () => {
           messages: caseFileMessages,
         });
         toast.success("Investigation saved to case files");
-        return [];
+        return [{ id: reportMsgId, role: "assistant" as const, content: result.name || "Investigation Report" }];
       } catch (err: unknown) {
         if (axios.isCancel(err)) {  
           const id = createMessageId();
@@ -286,10 +518,47 @@ export const ChatInterface = () => {
         investigateAbortRef.current = null;
         setActiveTaskId(null);
         setLoadingStages([]);
+        stopStageCycling();
+        setHitlState(null);
       }
     },
     [performInvestigationApi, addCaseFile]
   );
+
+  const handleHitlApprove = useCallback(async () => {
+    if (!hitlState) return;
+    const decision: { approved: boolean; edited_content?: string; additional_urls?: string[] } = { approved: true };
+    if (hitlState.content_type === "plan" && hitlState.editable) {
+      decision.edited_content = hitlEditedContent;
+    }
+    if (hitlState.content_type === "sources") {
+      const urls = hitlAdditionalUrls
+        .split("\n")
+        .map((u) => u.trim())
+        .filter((u) => u.startsWith("http"));
+      if (urls.length > 0) decision.additional_urls = urls;
+    }
+    try {
+      await apiClient.investigate.sendDecision(hitlState.threadId, decision);
+    } catch (e) {
+      console.error("Failed to send HITL decision:", e);
+    }
+    setHitlState(null);
+    setHitlEditedContent("");
+    setHitlAdditionalUrls("");
+  }, [hitlState, hitlEditedContent, hitlAdditionalUrls]);
+
+  const handleHitlReject = useCallback(async () => {
+    if (!hitlState) return;
+    try {
+      await apiClient.investigate.sendDecision(hitlState.threadId, { approved: false });
+    } catch (e) {
+      console.error("Failed to send HITL decision:", e);
+    }
+    setHitlState(null);
+    setHitlEditedContent("");
+    setHitlAdditionalUrls("");
+  }, [hitlState]);
 
   const chat = useChat({ persist: false, transport });
   const { messages, status, error, sendMessage, clearError, reset } = chat;
@@ -299,8 +568,7 @@ export const ChatInterface = () => {
   // Progress bar timer
   useEffect(() => {
     if (isLoading) {
-      const secs = Math.floor(Math.random() * (7 - 4 + 1) + 4) * 60; // 4–7 min in seconds
-      setEstimatedSeconds(secs);
+      setEstimatedSeconds(estimatedSecsRef.current);
       setElapsedSeconds(0);
       elapsedRef.current = 0;
       timerRef.current = setInterval(() => {
@@ -482,35 +750,38 @@ export const ChatInterface = () => {
     );
   };
 
-  const hasMessages = messages.length > 0 || pendingReports.length > 0 || pendingApiReports.length > 0;
+  const hasMessages = messages.length > 0 || pendingReports.length > 0;
 
   return (
     <div className="flex flex-col h-full">
       {!hasMessages ? (
         <div className="flex flex-col items-center justify-center flex-1 px-4">
-          {isLoading && estimatedSeconds > 0 && (() => {
-            const pct = Math.min(Math.round((elapsedSeconds / estimatedSeconds) * 100), 95);
-            const remaining = Math.max(estimatedSeconds - elapsedSeconds, 0);
-            const mins = Math.floor(remaining / 60);
-            const secs = remaining % 60;
-            return (
-              <div className="w-full max-w-3xl mb-6 space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <LoadingStages stages={loadingStages.length > 0 ? loadingStages : ["Analysing intelligence sources…"]} />
-                  <span className="font-mono font-medium text-foreground">{pct}%</span>
-                </div>
-                <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-primary transition-all duration-1000 ease-linear"
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground text-right">
-                  Estimated time remaining: {mins}m {secs.toString().padStart(2, "0")}s
-                </p>
-              </div>
-            );
-          })()}
+          {isLoading && (
+            hitlState
+              ? <HitlInlineCard hitlState={hitlState} hitlEditedContent={hitlEditedContent} setHitlEditedContent={setHitlEditedContent} hitlAdditionalUrls={hitlAdditionalUrls} setHitlAdditionalUrls={setHitlAdditionalUrls} onApprove={handleHitlApprove} onReject={handleHitlReject} className="w-full max-w-3xl mb-6" />
+              : estimatedSeconds > 0
+                ? (() => {
+                    const pct = Math.min(Math.round((elapsedSeconds / estimatedSeconds) * 100), 95);
+                    const remaining = Math.max(estimatedSeconds - elapsedSeconds, 0);
+                    const mins = Math.floor(remaining / 60);
+                    const secs = remaining % 60;
+                    return (
+                      <div className="w-full max-w-3xl mb-6 space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <LoadingStages stages={loadingStages.length > 0 ? loadingStages : ["Analysing intelligence sources…"]} />
+                          <span className="font-mono font-medium text-foreground">{pct}%</span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                          <div className="h-full rounded-full bg-primary transition-all duration-1000 ease-linear" style={{ width: `${pct}%` }} />
+                        </div>
+                        <p className="text-xs text-muted-foreground text-right">
+                          Estimated time remaining: {mins}m {secs.toString().padStart(2, "0")}s
+                        </p>
+                      </div>
+                    );
+                  })()
+                : null
+          )}
           <div className="mb-8 text-center">
             <h2 className="mb-2 text-3xl font-semibold text-foreground">Welcome back, {user?.displayName ?? user?.email ?? "Guest"}.</h2>
 
@@ -625,41 +896,32 @@ export const ChatInterface = () => {
                   )}
                 </div>
               ))}
-              {pendingApiReports.map((pr) => (
-                <div key={pr.id} className="rounded-lg p-4 text-sm max-w-2xl bg-background text-foreground border border-border shadow-sm">
-                  <InvestigationApiReport
-                    content={pr.content}
-                    geolocations={pr.geolocations}
-                    references={pr.references}
-                  />
-                  <p className="mt-4 text-xs text-muted-foreground text-right">Analysis completed in {formatDuration(pr.duration)}</p>
-                </div>
-              ))}
-              {isLoading && estimatedSeconds > 0 && (() => {
-                const pct = Math.min(Math.round((elapsedSeconds / estimatedSeconds) * 100), 95);
-                const remaining = Math.max(estimatedSeconds - elapsedSeconds, 0);
-                const mins = Math.floor(remaining / 60);
-                const secs = remaining % 60;
-                return (
-                  <div className="rounded-lg border bg-background p-6 space-y-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <LoadingStages stages={loadingStages.length > 0 ? loadingStages : ["Analysing intelligence sources…"]} />
-                        <span className="font-mono font-medium text-foreground">{pct}%</span>
-                      </div>
-                      <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-primary transition-all duration-1000 ease-linear"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                      <p className="text-xs text-muted-foreground text-right">
-                        Estimated time remaining: {mins}m {secs.toString().padStart(2, "0")}s
-                      </p>
-                    </div>
-                  </div>
-                );
-              })()}
+              {isLoading && (
+                hitlState
+                  ? <HitlInlineCard hitlState={hitlState} hitlEditedContent={hitlEditedContent} setHitlEditedContent={setHitlEditedContent} hitlAdditionalUrls={hitlAdditionalUrls} setHitlAdditionalUrls={setHitlAdditionalUrls} onApprove={handleHitlApprove} onReject={handleHitlReject} />
+                  : estimatedSeconds > 0
+                    ? (() => {
+                        const pct = Math.min(Math.round((elapsedSeconds / estimatedSeconds) * 100), 95);
+                        const remaining = Math.max(estimatedSeconds - elapsedSeconds, 0);
+                        const mins = Math.floor(remaining / 60);
+                        const secs = remaining % 60;
+                        return (
+                          <div className="rounded-lg border bg-background p-6 space-y-2">
+                            <div className="flex items-center justify-between text-sm">
+                              <LoadingStages stages={loadingStages.length > 0 ? loadingStages : ["Analysing intelligence sources…"]} />
+                              <span className="font-mono font-medium text-foreground">{pct}%</span>
+                            </div>
+                            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                              <div className="h-full rounded-full bg-primary transition-all duration-1000 ease-linear" style={{ width: `${pct}%` }} />
+                            </div>
+                            <p className="text-xs text-muted-foreground text-right">
+                              Estimated time remaining: {mins}m {secs.toString().padStart(2, "0")}s
+                            </p>
+                          </div>
+                        );
+                      })()
+                    : null
+              )}
               <div ref={messagesEndRef} />
             </div>
           </div>

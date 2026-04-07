@@ -22,8 +22,8 @@ def _to_unix(pub_date) -> int:
 
 
 class Article(TypedDict):
-    id_article: int
-    id_site: int
+    id_article: str
+    id_site: str
     header: str
     summary: str
     url: str
@@ -37,7 +37,7 @@ class Article(TypedDict):
 @tool
 def search_asknews(
     query: str,
-    n_articles: int = 20,
+    n_articles: int = 10,
     categories: list[str] = [],
     start_timestamp: int = None,
     end_timestamp: int = None,
@@ -62,16 +62,16 @@ def search_asknews(
     for article in response.as_dicts:
         results.append(
             Article(
-                id_article=getattr(article, "article_id", 0) or 0,
-                id_site=getattr(article, "source_id", 0) or 0,
-                header=getattr(article, "title", "") or "",
-                summary=getattr(article, "summary", "") or "",
-                content=getattr(article, "article_content", "") or getattr(article, "body", "") or "",
-                url=getattr(article, "article_url", "") or "",
+                id_article=str(getattr(article, "article_id", "") or ""),
+                id_site=str(getattr(article, "source_id", "") or ""),
+                header=str(getattr(article, "title", "") or ""),
+                summary=str(getattr(article, "summary", "") or ""),
+                content=str(getattr(article, "article_content", "") or getattr(article, "body", "") or ""),
+                url=str(getattr(article, "article_url", "") or ""),
                 unix_timestamp=_to_unix(getattr(article, "pub_date", None)),
-                language=getattr(article, "language", "") or "",
-                countrycode=getattr(article, "country", "") or "",
-                site_rank_global=getattr(article, "rank_score", 0) or 0,
+                language=str(getattr(article, "language", "") or ""),
+                countrycode=str(getattr(article, "country", "") or ""),
+                site_rank_global=int(getattr(article, "rank_score", 0) or 0),
             )
         )
 
