@@ -4,12 +4,38 @@ Subprocess entrypoint for investigations.
 Spawned by investigate.py via asyncio.create_subprocess_exec so the
 LangGraph pipeline runs in a separate OS process that can be SIGKILL-ed.
 
-Writes the report json_path to stdout on success, nothing on failure.
-Exit codes: 0 = success, 1 = error.
+stdout protocol:
+  PROGRESS:{agent_name}   — agent is starting
+  HITL:{json}             — waiting for user review (stdin)
+  RESULT:{json_path}      — success
+  CANCELLED               — user rejected a stage
+  ERROR:{message}         — unrecoverable error
+
+stdin:  one JSON line per HITL, e.g.:
+  {"approved": true}
+  {"approved": true, "edited_content": "Modified plan..."}
+  {"approved": true, "additional_urls": ["https://..."]}
+
+Exit codes: 0 = success or cancelled, 1 = error.
 """
 
+import json
 import sys
 import argparse
+
+
+def _on_progress(agent_name: str) -> None:
+    print(f"PROGRESS:{agent_name}", flush=True)
+
+
+def _on_hitl(hitl_data: dict) -> dict:
+    """Send HITL event to stdout, block until decision arrives on stdin."""
+    print(f"HITL:{json.dumps(hitl_data)}", flush=True)
+    try:
+        line = sys.stdin.readline().strip()
+        return json.loads(line)
+    except Exception:
+        return {"approved": False}
 
 
 def main() -> None:
@@ -18,18 +44,34 @@ def main() -> None:
     parser.add_argument("--thread-id", required=True)
     args = parser.parse_args()
 
-    # Imports are deferred so startup cost is paid only when actually running
     from dotenv import load_dotenv
     load_dotenv()
 
-    from src.graph.flow import run_with_hitl
+    try:
+        from src.graph.flow import run_pipeline_stages
+    except Exception as exc:
+        print(f"ERROR:Failed to load investigation engine: {exc}", flush=True)
+        sys.exit(1)
 
-    result = run_with_hitl(task=args.query, thread_id=args.thread_id, auto_approve=True)
+    try:
+        result = run_pipeline_stages(
+            task=args.query,
+            thread_id=args.thread_id,
+            on_progress=_on_progress,
+            on_hitl=_on_hitl,
+        )
+    except Exception as exc:
+        import traceback
+        traceback.print_exc(file=sys.stderr)  # full traceback → Cloud Run logs
+        print(f"ERROR:Investigation engine error: {exc}", flush=True)
+        sys.exit(1)
+
     if result:
-        print(result, end="")
+        print(f"RESULT:{result}", flush=True)
         sys.exit(0)
     else:
-        sys.exit(1)
+        print("CANCELLED", flush=True)
+        sys.exit(0)
 
 
 if __name__ == "__main__":

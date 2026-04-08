@@ -34,8 +34,29 @@ else:
     firebase_admin.initialize_app()
 
 
+async def _run_migrations() -> None:
+    """Apply pending Prisma migrations. Logs a warning on failure but does not block startup."""
+    import asyncio
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "prisma", "migrate", "deploy", "--schema=prisma/schema.prisma",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=60)
+        if proc.returncode == 0:
+            logger.info("Prisma migrations applied successfully")
+        else:
+            logger.warning("Prisma migrate deploy exited %d: %s", proc.returncode, stdout.decode())
+    except asyncio.TimeoutError:
+        logger.warning("Prisma migrate deploy timed out — skipping")
+    except Exception as exc:
+        logger.warning("Prisma migrate deploy failed — skipping: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await _run_migrations()
     await init_data_factory()
     yield
     await shutdown_data_factory()
