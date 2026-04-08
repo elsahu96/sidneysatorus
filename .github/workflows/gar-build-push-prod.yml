@@ -1,49 +1,47 @@
 # Build backend + frontend Docker images, push to Google Artifact Registry, then deploy to Cloud Run.
+# ENVIRONMENT: PROD  (satorus-sidney project)
+# Triggers on push to the "main" branch.
+#
 # Auth: Workload Identity Federation (OIDC) — no JSON keys in GitHub secrets.
 #
 # Build cache: Docker Buildx + GitHub Actions cache (type=gha).
-# - mode=min (not max): mode=max uploads huge cache blobs and often *increases* total time on big images;
-#   min caches enough for typical layer reuse with far less upload time.
-# - The first run after enabling/changing cache can be slower (populate cache); compare 2nd+ runs on same branch.
+# - Separate cache scopes from staging so prod builds never share staging layers.
 #
-# Required GitHub secrets:
-#   GCP_WORKLOAD_IDENTITY_PROVIDER — full resource name of the WIF provider
-#   GCP_SERVICE_ACCOUNT_EMAIL      — SA email (artifactregistry.writer, run.developer, and
-#                                  serviceAccountUser on Cloud Run runtime SAs — see GITHUB_ACTIONS_GCP.md)
+# Required GitHub Secrets (Settings → Secrets and variables → Actions → Secrets):
+#   GCP_WORKLOAD_IDENTITY_PROVIDER_PROD — WIF provider resource name (satorus-sidney)
+#   GCP_SERVICE_ACCOUNT_EMAIL_PROD      — CI SA email (gh-actions-gar@satorus-sidney.iam.gserviceaccount.com)
 #
 # Required GitHub Variables (Settings → Secrets and variables → Actions → Variables):
-#   VITE_API_URL — public backend HTTPS URL (no trailing slash)
-# Optional (frontend build): match frontend_env.txt — VITE_WS_URL, VITE_SUPABASE_*, VITE_MAPBOX_*,
-#   VITE_FIREBASE_*, VITE_SATORUS_TENANT_ID (same names as in repo root frontend_env.txt)
+#   VITE_API_URL_PROD — prod backend HTTPS URL (https://ai-sidney-backend-prod-qxi7ucmxoa-nw.a.run.app)
+#   + all other VITE_* build-time vars (VITE_FIREBASE_*, VITE_MAPBOX_*, etc.)
 #
-# Optional Variables (defaults match Terraform staging: app_name ai_sidney, environment staging):
-#   CLOUD_RUN_BACKEND_SERVICE  — e.g. ai-sidney-backend-staging
-#   CLOUD_RUN_FRONTEND_SERVICE — e.g. ai-sidney-frontend-staging
-#
-name: Build, push, and deploy to Cloud Run
+# Optional Variables (defaults match Terraform prod names):
+#   CLOUD_RUN_BACKEND_SERVICE_PROD  — default: ai-sidney-backend-prod
+#   CLOUD_RUN_FRONTEND_SERVICE_PROD — default: ai-sidney-frontend-prod
+
+name: "Prod: Build, push, and deploy to Cloud Run"
 
 on:
   push:
     branches:
-      - staging
       - main
   workflow_dispatch:
 
 concurrency:
-  group: gar-${{ github.workflow }}-${{ github.ref }}
+  group: gar-prod-${{ github.ref }}
   cancel-in-progress: true
 
 env:
-  PROJECT_ID: satorus-sidney-dev
+  PROJECT_ID: satorus-sidney
   REGION: europe-west2
-  # GAR Docker path must be HOST/PROJECT/REPOSITORY/IMAGE — the last segment is the package name inside the repo.
-  GAR_BACKEND: ai-sidney-backend
+  # GAR repo IDs — prod uses environment-suffixed names to avoid 409 collision with staging repos
+  GAR_BACKEND: ai-sidney-backend-prod
   GAR_BACKEND_IMAGE: backend
-  GAR_FRONTEND: ai-sidney-frontend
+  GAR_FRONTEND: ai-sidney-frontend-prod
   GAR_FRONTEND_IMAGE: frontend
-  # Match modules/cloud_run: "${replace(app_name,'_','-')}-backend-${environment}" (override via repo Variables if needed)
-  CLOUD_RUN_BACKEND_SERVICE: ${{ secrets.CLOUD_RUN_BACKEND_SERVICE || 'ai-sidney-backend-staging' }}
-  CLOUD_RUN_FRONTEND_SERVICE: ${{ secrets.CLOUD_RUN_FRONTEND_SERVICE || 'ai-sidney-frontend-staging' }}
+  # Cloud Run service names (override via repo Variables if renamed)
+  CLOUD_RUN_BACKEND_SERVICE: ${{ vars.CLOUD_RUN_BACKEND_SERVICE_PROD || 'ai-sidney-backend-prod' }}
+  CLOUD_RUN_FRONTEND_SERVICE: ${{ vars.CLOUD_RUN_FRONTEND_SERVICE_PROD || 'ai-sidney-frontend-prod' }}
 
 jobs:
   build-push:
@@ -51,7 +49,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-      # Required so docker/build-push-action can read/write BuildKit cache (type=gha)
       actions: write
 
     steps:
@@ -61,12 +58,12 @@ jobs:
       - name: Set image tag (12-char SHA)
         run: echo "TAG=${GITHUB_SHA:0:12}" >> "$GITHUB_ENV"
 
-      - name: Authenticate to Google Cloud
+      - name: Authenticate to Google Cloud (prod)
         id: auth
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_PROD }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL_PROD }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
@@ -77,7 +74,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # GHA cache scopes keep backend/frontend entries separate. Use mode=min to avoid multi‑GB cache uploads.
       - name: Build and push backend
         uses: docker/build-push-action@v6
         with:
@@ -87,20 +83,20 @@ jobs:
           tags: |
             ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_BACKEND }}/${{ env.GAR_BACKEND_IMAGE }}:${{ env.TAG }}
             ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_BACKEND }}/${{ env.GAR_BACKEND_IMAGE }}:latest
-          cache-from: type=gha,scope=backend-gar
-          cache-to: type=gha,mode=min,scope=backend-gar
+          cache-from: type=gha,scope=backend-gar-prod
+          cache-to: type=gha,mode=min,scope=backend-gar-prod
           provenance: false
 
       - name: Record backend image for deploy
         run: |
           echo "BACKEND_IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/${GAR_BACKEND}/${GAR_BACKEND_IMAGE}:${TAG}" >> "$GITHUB_ENV"
 
-      - name: Check VITE_API_URL (required for frontend build)
+      - name: Check VITE_API_URL_PROD (required for frontend build)
         env:
-          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_API_URL_PROD: ${{ vars.VITE_API_URL_PROD }}
         run: |
-          if [ -z "${VITE_API_URL:-}" ]; then
-            echo "::error::Set repository variable VITE_API_URL (Settings → Secrets and variables → Actions → Variables) to your backend Cloud Run HTTPS URL."
+          if [ -z "${VITE_API_URL_PROD:-}" ]; then
+            echo "::error::Set repository variable VITE_API_URL_PROD (Settings → Variables) to the prod backend URL."
             exit 1
           fi
 
@@ -111,7 +107,7 @@ jobs:
           file: ./frontend/Dockerfile
           push: true
           build-args: |
-            VITE_API_URL=${{ secrets.VITE_API_URL }}
+            VITE_API_URL=${{ vars.VITE_API_URL_PROD }}
             VITE_WS_URL=${{ secrets.VITE_WS_URL }}
             VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
             VITE_SUPABASE_PUBLISHABLE_KEY=${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
@@ -127,34 +123,32 @@ jobs:
           tags: |
             ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_FRONTEND }}/${{ env.GAR_FRONTEND_IMAGE }}:${{ env.TAG }}
             ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_FRONTEND }}/${{ env.GAR_FRONTEND_IMAGE }}:latest
-          cache-from: type=gha,scope=frontend-gar
-          cache-to: type=gha,mode=min,scope=frontend-gar
+          cache-from: type=gha,scope=frontend-gar-prod
+          cache-to: type=gha,mode=min,scope=frontend-gar-prod
           provenance: false
 
       - name: Record frontend image for deploy
         run: |
           echo "FRONTEND_IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/${GAR_FRONTEND}/${GAR_FRONTEND_IMAGE}:${TAG}" >> "$GITHUB_ENV"
 
-      # Point each Cloud Run service at the images built in this run (same 12-char SHA tag).
-      - name: Deploy to Cloud Run
+      - name: Deploy to Cloud Run (prod)
         run: |
           set -euo pipefail
-          echo "Deploying backend → ${CLOUD_RUN_BACKEND_SERVICE}"
+          echo "Deploying backend → ${CLOUD_RUN_BACKEND_SERVICE} (${PROJECT_ID})"
           gcloud run services update "${CLOUD_RUN_BACKEND_SERVICE}" \
             --region="${REGION}" \
             --project="${PROJECT_ID}" \
             --image="${BACKEND_IMAGE}"
-          echo "Deploying frontend → ${CLOUD_RUN_FRONTEND_SERVICE}"
+          echo "Deploying frontend → ${CLOUD_RUN_FRONTEND_SERVICE} (${PROJECT_ID})"
           gcloud run services update "${CLOUD_RUN_FRONTEND_SERVICE}" \
             --region="${REGION}" \
             --project="${PROJECT_ID}" \
-            --image="${FRONTEND_IMAGE}"
+            --image="${FRONTEND_IMAGE}" \
+            --port=8080
 
       - name: Summary
         run: |
-          echo "### Images pushed" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Backend: \`${BACKEND_IMAGE}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Prod deploy complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Backend:  \`${BACKEND_IMAGE}\`"  >> "$GITHUB_STEP_SUMMARY"
           echo "- Frontend: \`${FRONTEND_IMAGE}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "### Cloud Run" >> "$GITHUB_STEP_SUMMARY"
-          echo "- \`${CLOUD_RUN_BACKEND_SERVICE}\` and \`${CLOUD_RUN_FRONTEND_SERVICE}\` updated in \`${REGION}\`." >> "$GITHUB_STEP_SUMMARY"
+          echo "- Services: \`${CLOUD_RUN_BACKEND_SERVICE}\` + \`${CLOUD_RUN_FRONTEND_SERVICE}\` in \`${REGION}\`" >> "$GITHUB_STEP_SUMMARY"
