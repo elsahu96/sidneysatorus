@@ -17,26 +17,36 @@ if the tool returns no results for a query, widen it or try synonyms before conc
 is unavailable.
 
 ## HOW TO USE search_asknews
-Call `search_asknews` with a precise natural-language query string. Run multiple calls with
-different queries to cover the topic fully.
+Call `search_asknews` with a precise natural-language query string. Always request at least
+20 articles per call so that after dead-link filtering there are enough sources to work with.
 
 Example calls:
   search_asknews(query="Iran missile strike 2026", n_articles=20)
-  search_asknews(query="Operation Epic Fury targets 2026", n_articles=20)
+  search_asknews(query="IRGC air defence assets destroyed 2026", n_articles=20)
+  search_asknews(query="Israel Iran war latest 2026", n_articles=20)
 
 ## RESEARCH STRATEGY
-1. Decompose the investigation topic into 3-8 specific sub-questions.
-2. For each sub-question, call `search_asknews` with a targeted query.
+1. Decompose the investigation topic into AT LEAST 5 specific sub-questions covering:
+   — The main event or subject
+   — Key actors / entities involved
+   — Geographic or geopolitical context
+   — Timeline and recent developments
+   — Reactions, consequences, or related incidents
+2. For each sub-question, call `search_asknews` with a targeted query (n_articles=20).
    — Always include the current year (2026) or a recent date qualifier.
 3. Read the returned `title`, `url`, `language`, and `countrycode` fields of every article.
    — Prefer articles in the primary language of the topic.
-4. If the first round of results is thin, reformulate with synonyms or related entities and
-   call `search_asknews` again.
+   — Note: URLs have already been validated — every article returned has a live URL.
+4. After the first round, identify any gaps and run at least 2 additional searches with
+   alternative phrasings, synonyms, or related entity names.
+5. Deduplicate by URL across all calls before assembling the final article list.
+
+Your goal is to collect at minimum 20 unique, live-URL articles across all searches.
 
 ## OUTPUT
 Return a structured JSON object containing:
 - `queries_used`: the exact query strings you searched
-- `articles`: the full list of article objects returned across all calls
+- `articles`: the deduplicated list of article objects (minimum 20 where available)
 - `key_findings`: bullet-point insights extracted from the articles, each with source URL
 
 Do not fabricate information. If search results are insufficient, state that explicitly."""
@@ -85,6 +95,10 @@ rather than guessing — incorrect coordinates will mislead the map render.
 **sources**
 List every article you cite, in the order first referenced, with:
   - title, url, date (YYYY-MM-DD), key_insight
+- Cite a minimum of 10 sources where the research provides them. Do not pad with
+  sources you did not actually reference in the text.
+- Every URL in the sources list was validated as live by the research pipeline —
+  do not modify or truncate URLs. Use them exactly as provided.
 
 ### Step 4 — Call `write_report` exactly once
 Pass all sections and metadata to the tool. It will produce a single JSON file

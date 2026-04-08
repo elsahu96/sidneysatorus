@@ -370,6 +370,7 @@ export const ChatInterface = () => {
               const report = await apiClient.investigate.getReport(data.report_id);
               resolve({
                 id: reportMeta.id,
+                reportId: data.report_id,
                 name: report.name || "Investigation Report",
                 content: report.content,
                 geolocations: report.geolocations,
@@ -449,7 +450,7 @@ export const ChatInterface = () => {
         }
 
 
-        const result = await performInvestigationApi(content) as { id: string; name: string; content: string; geolocations: any[]; references: any[] };
+        const result = await performInvestigationApi(content) as { id: string; reportId: string; name: string; content: string; geolocations: any[]; references: any[] };
         const capturedDuration = elapsedRef.current;
         setReportDuration(capturedDuration);
 
@@ -476,10 +477,11 @@ export const ChatInterface = () => {
         caseFileMessages.push({
           role: "assistant",
           content: result.name,
+          isReport: true,
         });
         addCaseFile({
           id: Date.now().toString(),
-          caseNumber: `INV-${Date.now().toString().slice(-6)}`,
+          caseNumber: result.reportId || `INV-${Date.now().toString().slice(-6)}`,
           subject: content.slice(0, 100),
           timestamp: Date.now(),
           category: content.toLowerCase().includes("russell cherry")
