@@ -1,25 +1,13 @@
 # Build backend + frontend Docker images, push to Google Artifact Registry, then deploy to Cloud Run.
-# ENVIRONMENT: PROD  (satorus-sidney project)
-# Triggers on push to the "main" branch.
+# ENVIRONMENT: PROD (satorus-sidney). Same flow as staging workflow: WIF auth + configure-docker.
 #
-# Auth: Workload Identity Federation (OIDC) — no JSON keys in GitHub secrets.
-# Docker push: use oauth2accesstoken + docker/login-action (not gcloud auth configure-docker),
-# which avoids gcloud.docker-helper "getAccessToken" / impersonation failures with WIF.
+# Secrets (prod project WIF):
+#   GCP_WORKLOAD_IDENTITY_PROVIDER_PROD
+#   GCP_SERVICE_ACCOUNT_EMAIL_PROD
 #
-# Build cache: Docker Buildx + GitHub Actions cache (type=gha).
-# - Separate cache scopes from staging so prod builds never share staging layers.
-#
-# Required GitHub Secrets (Settings → Secrets and variables → Actions → Secrets):
-#   GCP_WORKLOAD_IDENTITY_PROVIDER_PROD — WIF provider resource name (satorus-sidney)
-#   GCP_SERVICE_ACCOUNT_EMAIL_PROD      — CI SA email (gh-actions-gar@satorus-sidney.iam.gserviceaccount.com)
-#
-# Required GitHub Variables (Settings → Secrets and variables → Actions → Variables):
-#   VITE_API_URL_PROD — prod backend HTTPS URL (https://ai-sidney-backend-prod-qxi7ucmxoa-nw.a.run.app)
-#   + all other VITE_* build-time vars (VITE_FIREBASE_*, VITE_MAPBOX_*, etc.)
-#
-# Optional Variables (defaults match Terraform prod names):
-#   CLOUD_RUN_BACKEND_SERVICE_PROD  — default: ai-sidney-backend-prod
-#   CLOUD_RUN_FRONTEND_SERVICE_PROD — default: ai-sidney-frontend-prod
+# Variables:
+#   VITE_API_URL_PROD — prod backend URL (no trailing slash)
+# Optional: CLOUD_RUN_BACKEND_SERVICE_PROD, CLOUD_RUN_FRONTEND_SERVICE_PROD
 
 name: "Prod: Build, push, and deploy to Cloud Run"
 
@@ -36,12 +24,10 @@ concurrency:
 env:
   PROJECT_ID: satorus-sidney
   REGION: europe-west2
-  # GAR repo IDs — prod uses environment-suffixed names to avoid 409 collision with staging repos
   GAR_BACKEND: ai-sidney-backend-prod
   GAR_BACKEND_IMAGE: backend
   GAR_FRONTEND: ai-sidney-frontend-prod
   GAR_FRONTEND_IMAGE: frontend
-  # Cloud Run service names (override via repo Variables if renamed)
   CLOUD_RUN_BACKEND_SERVICE: ${{ vars.CLOUD_RUN_BACKEND_SERVICE_PROD || 'ai-sidney-backend-prod' }}
   CLOUD_RUN_FRONTEND_SERVICE: ${{ vars.CLOUD_RUN_FRONTEND_SERVICE_PROD || 'ai-sidney-frontend-prod' }}
 
@@ -60,28 +46,18 @@ jobs:
       - name: Set image tag (12-char SHA)
         run: echo "TAG=${GITHUB_SHA:0:12}" >> "$GITHUB_ENV"
 
-      - name: Authenticate to Google Cloud (prod)
+      - name: Authenticate to Google Cloud
         id: auth
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_PROD }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL_PROD }}
-          # Access token for docker/login-action; also sets GOOGLE_OAUTH_ACCESS_TOKEN for gcloud deploy.
-          token_format: access_token
-          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
-          access_token_lifetime: 3600s
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      # Prefer login-action over "gcloud auth configure-docker" — the docker credential helper often
-      # hits iam.serviceAccounts.getAccessToken / impersonation errors with WIF.
-      - name: Log in to Artifact Registry (Docker)
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGION }}-docker.pkg.dev
-          username: oauth2accesstoken
-          password: ${{ steps.auth.outputs.access_token }}
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -143,15 +119,15 @@ jobs:
         run: |
           echo "FRONTEND_IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/${GAR_FRONTEND}/${GAR_FRONTEND_IMAGE}:${TAG}" >> "$GITHUB_ENV"
 
-      - name: Deploy to Cloud Run (prod)
+      - name: Deploy to Cloud Run
         run: |
           set -euo pipefail
-          echo "Deploying backend → ${CLOUD_RUN_BACKEND_SERVICE} (${PROJECT_ID})"
+          echo "Deploying backend → ${CLOUD_RUN_BACKEND_SERVICE}"
           gcloud run services update "${CLOUD_RUN_BACKEND_SERVICE}" \
             --region="${REGION}" \
             --project="${PROJECT_ID}" \
             --image="${BACKEND_IMAGE}"
-          echo "Deploying frontend → ${CLOUD_RUN_FRONTEND_SERVICE} (${PROJECT_ID})"
+          echo "Deploying frontend → ${CLOUD_RUN_FRONTEND_SERVICE}"
           gcloud run services update "${CLOUD_RUN_FRONTEND_SERVICE}" \
             --region="${REGION}" \
             --project="${PROJECT_ID}" \
