@@ -1,8 +1,8 @@
 # Build backend + frontend Docker images, push to Google Artifact Registry, then deploy to Cloud Run.
 # ENVIRONMENT: PROD (satorus-sidney).
-# Auth: default WIF only (do NOT set token_format: access_token — that calls generateAccessToken and 403s).
-# Docker: "gcloud auth print-access-token | docker login" — NOT configure-docker (docker-helper 403s).
-# Required: workloadIdentityUser (+ TokenCreator) on gh-actions-gar for the GitHub principalSet.
+# Auth: default WIF only (do NOT set token_format: access_token — same IAM path if misconfigured).
+# After auth: gcloud auth login --cred-file=GOOGLE_APPLICATION_CREDENTIALS, then print-access-token | docker login.
+# If you still see getAccessToken 403, fix prod WIF secrets + principalSet IAM (see DEPLOYMENT Issue 15).
 #
 # Secrets (prod project WIF):
 #   GCP_WORKLOAD_IDENTITY_PROVIDER_PROD
@@ -53,11 +53,25 @@ jobs:
         id: auth
         uses: google-github-actions/auth@v2
         with:
+          # Helps ADC / gcloud pick the right project; must match WIF pool project.
+          project_id: ${{ env.PROJECT_ID }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_PROD }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL_PROD }}
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          # WIF external-account creds need a recent SDK (see setup-gcloud README).
+          version: ">= 416.0.0"
+
+      # Register the auth action's external-account JSON with gcloud so `print-access-token` uses WIF (not an empty gcloud user).
+      - name: Activate gcloud session from WIF credential file
+        run: |
+          set -euo pipefail
+          test -n "${GOOGLE_APPLICATION_CREDENTIALS:-}"
+          gcloud auth login --brief --cred-file="${GOOGLE_APPLICATION_CREDENTIALS}"
+          gcloud config set project "${PROJECT_ID}"
 
       - name: Log in to Artifact Registry (Docker)
         run: |
