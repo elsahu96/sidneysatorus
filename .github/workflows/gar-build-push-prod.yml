@@ -3,6 +3,8 @@
 # Triggers on push to the "main" branch.
 #
 # Auth: Workload Identity Federation (OIDC) — no JSON keys in GitHub secrets.
+# Docker push: use oauth2accesstoken + docker/login-action (not gcloud auth configure-docker),
+# which avoids gcloud.docker-helper "getAccessToken" / impersonation failures with WIF.
 #
 # Build cache: Docker Buildx + GitHub Actions cache (type=gha).
 # - Separate cache scopes from staging so prod builds never share staging layers.
@@ -64,12 +66,22 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_PROD }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL_PROD }}
+          # Access token for docker/login-action; also sets GOOGLE_OAUTH_ACCESS_TOKEN for gcloud deploy.
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
+          access_token_lifetime: 3600s
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+      # Prefer login-action over "gcloud auth configure-docker" — the docker credential helper often
+      # hits iam.serviceAccounts.getAccessToken / impersonation errors with WIF.
+      - name: Log in to Artifact Registry (Docker)
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGION }}-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
