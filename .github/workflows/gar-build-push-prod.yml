@@ -1,8 +1,7 @@
 # Build backend + frontend Docker images, push to Google Artifact Registry, then deploy to Cloud Run.
-# ENVIRONMENT: PROD (satorus-sidney).
-# Docker: use "gcloud auth print-access-token | docker login" — NOT "configure-docker".
-# The docker credential helper triggers iam.serviceAccounts.getAccessToken; prod WIF often only has
-# workloadIdentityUser. Staging in satorus-sidney-dev may still work with configure-docker.
+# ENVIRONMENT: PROD (satorus-sidney). Same Docker auth as staging: configure-docker after WIF auth.
+# Required on gh-actions-gar@...: roles/iam.workloadIdentityUser for the GitHub principalSet
+# (see Documents/DEPLOYMENT_CHANGES_AND_ISSUES.md — prod CI must match dev WIF binding).
 #
 # Secrets (prod project WIF):
 #   GCP_WORKLOAD_IDENTITY_PROVIDER_PROD
@@ -59,11 +58,8 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      # Avoid gcloud auth configure-docker — its docker-helper hits getAccessToken and fails with WIF in prod.
-      - name: Log in to Artifact Registry (Docker)
-        run: |
-          set -euo pipefail
-          gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin "https://${REGION}-docker.pkg.dev"
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
