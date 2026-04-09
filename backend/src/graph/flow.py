@@ -390,11 +390,13 @@ def run_pipeline_stages(
         tools=[write_report],
         prompt=WRITER_AGENT_PROMPT,
     )
-    # Gemini rejects tool calls whose arguments contain chunks with no suitable
-    # separator that exceed the model's internal limit (~32 k chars per arg).
-    # Cap the research summary at 80 k chars to stay well within limits while
-    # still giving the writer agent enough context.
-    _MAX_RESEARCH_CHARS = 80_000
+    # Gemini's internal chunker splits on whitespace. A single non-whitespace
+    # token longer than ~32 k bytes raises "Separator is not found".
+    # Sanitize the summary to remove any such tokens, then cap total length.
+    from src.graph.tools.asknews import _sanitize_text as _asknews_sanitize
+    research_summary = _asknews_sanitize(research_summary)
+
+    _MAX_RESEARCH_CHARS = 40_000
     if len(research_summary) > _MAX_RESEARCH_CHARS:
         research_summary = research_summary[:_MAX_RESEARCH_CHARS] + "\n\n[Research summary truncated to fit model context limit]"
         logger.warning("Research summary truncated to %d chars for writer agent.", _MAX_RESEARCH_CHARS)
@@ -409,6 +411,16 @@ def run_pipeline_stages(
     json_path = _last_write_result.get("json_path")
     if json_path:
         logger.info("Pipeline complete. Report written to: %s", json_path)
+        # Overwrite the LLM-generated title with the original user query so the
+        # report is labelled consistently throughout the UI.
+        try:
+            import json as _json
+            _p = __import__("pathlib").Path(json_path)
+            _data = _json.loads(_p.read_text(encoding="utf-8"))
+            _data.setdefault("metadata", {})["title"] = task
+            _p.write_text(_json.dumps(_data, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception as _e:
+            logger.warning("Could not patch report title: %s", _e)
     else:
         logger.warning("Writer agent did not produce a json_path.")
     return json_path

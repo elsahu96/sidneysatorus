@@ -4,6 +4,21 @@ import pathlib
 from datetime import datetime
 from langchain_core.tools import tool
 
+# Mirror the same limit used in asknews.py.  Gemini's chunker splits on
+# whitespace; any run of non-whitespace chars longer than ~32 k bytes raises
+# "Separator is not found, and chunk exceed the limit".
+_MAX_WORD_BYTES = 8_000
+
+
+def _sanitize(text: str) -> str:
+    """Truncate any whitespace-delimited token that would exceed Gemini's chunk limit."""
+    if not text:
+        return text
+    return " ".join(
+        (tok[:_MAX_WORD_BYTES] + "…") if len(tok.encode("utf-8")) > _MAX_WORD_BYTES else tok
+        for tok in text.split(" ")
+    )
+
 # Project root is 4 levels up from this file:
 # tools/ -> graph/ -> src/ -> backend/ -> <project_root>
 _PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[4]
@@ -72,6 +87,13 @@ def write_report(
 
     # Index sources for inline citation matching
     indexed_sources = [{"index": i + 1, **source} for i, source in enumerate(sources)]
+
+    # Sanitize long-text fields so no whitespace-delimited token exceeds
+    # Gemini's internal chunk limit (raises "Separator is not found").
+    report_summary = _sanitize(report_summary)
+    report_methodology = _sanitize(report_methodology)
+    report_detailed_analysis = _sanitize(report_detailed_analysis)
+    query_understanding = _sanitize(query_understanding)
 
     payload = {
         "metadata": {
