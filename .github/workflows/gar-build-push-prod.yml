@@ -33,8 +33,8 @@ env:
   GAR_BACKEND_IMAGE: backend
   GAR_FRONTEND: ai-sidney-frontend-prod
   GAR_FRONTEND_IMAGE: frontend
-  CLOUD_RUN_BACKEND_SERVICE: ${{ vars.CLOUD_RUN_BACKEND_SERVICE_PROD || 'ai-sidney-backend-prod' }}
-  CLOUD_RUN_FRONTEND_SERVICE: ${{ vars.CLOUD_RUN_FRONTEND_SERVICE_PROD || 'ai-sidney-frontend-prod' }}
+  CLOUD_RUN_BACKEND_SERVICE: ${{ secrets.CLOUD_RUN_BACKEND_SERVICE_PROD || 'ai-sidney-backend-prod' }}
+  CLOUD_RUN_FRONTEND_SERVICE: ${{ secrets.CLOUD_RUN_FRONTEND_SERVICE_PROD || 'ai-sidney-frontend-prod' }}
 
 jobs:
   build-push:
@@ -86,7 +86,7 @@ jobs:
 
       - name: Check VITE_API_URL_PROD (required for frontend build)
         env:
-          VITE_API_URL_PROD: ${{ vars.VITE_API_URL_PROD }}
+          VITE_API_URL_PROD: ${{ secrets.VITE_API_URL_PROD }}
         run: |
           if [ -z "${VITE_API_URL_PROD:-}" ]; then
             echo "::error::Set repository variable VITE_API_URL_PROD (Settings → Variables) to the prod backend URL."
@@ -100,7 +100,7 @@ jobs:
           file: ./frontend/Dockerfile
           push: true
           build-args: |
-            VITE_API_URL=${{ vars.VITE_API_URL_PROD }}
+            VITE_API_URL=${{ secrets.VITE_API_URL_PROD }}
             VITE_WS_URL=${{ secrets.VITE_WS_URL }}
             VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
             VITE_SUPABASE_PUBLISHABLE_KEY=${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
