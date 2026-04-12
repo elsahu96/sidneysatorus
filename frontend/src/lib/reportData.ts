@@ -1,7 +1,7 @@
 // Report data structures for investigations
 
 export interface ReportData {
-  type: "standard" | "russell-cherry";
+  type: "standard" | "KYC";
   subject: string;
   sections: ReportSection[];
 }

@@ -4,6 +4,7 @@ import { folderApi } from "./folderApi";
 import { projectApi } from "./projectApi";
 import { reportApi } from "./reportApi";
 import { userApi } from "./userApi";
+import { sessionApi } from "./sessionApi";
 
 export const apiClient = {
   investigate: investigateApi,
@@ -12,4 +13,5 @@ export const apiClient = {
   folder: folderApi,
   project: projectApi,
   user: userApi,
+  session: sessionApi,
 };

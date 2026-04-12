@@ -42,6 +42,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--query", required=True)
     parser.add_argument("--thread-id", required=True)
+    parser.add_argument("--quick-search", action="store_true", default=False)
     args = parser.parse_args()
 
     from dotenv import load_dotenv
@@ -59,6 +60,7 @@ def main() -> None:
             thread_id=args.thread_id,
             on_progress=_on_progress,
             on_hitl=_on_hitl,
+            quick_search=args.quick_search,
         )
     except Exception as exc:
         import traceback

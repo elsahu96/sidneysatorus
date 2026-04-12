@@ -1,19 +1,19 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Users, FileText, Search } from "lucide-react";
+import { Users, MessageSquare, Search } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import { useSidebarContext } from "@/contexts/SidebarContext";
-import { useCaseFiles } from "@/contexts/CaseFilesContext";
 import { cn } from "@/lib/utils";
+import { useSessionHistory } from "@/hooks/useSessionHistory";
 
 const Admin = () => {
   const { isCollapsed } = useSidebarContext();
-  const { caseFiles } = useCaseFiles();
+  const { sessions } = useSessionHistory();
 
   const stats = [
     { title: "Total Users", value: "1", icon: Users },
-    { title: "Case Files", value: caseFiles.length.toString(), icon: FileText },
-    { title: "Active Investigations", value: caseFiles.length.toString(), icon: Search },
+    { title: "Chat Sessions", value: sessions.length.toString(), icon: MessageSquare },
+    { title: "Active Investigations", value: sessions.length.toString(), icon: Search },
   ];
 
   return (
@@ -58,8 +58,8 @@ const Admin = () => {
                     Manage Users
                   </Button>
                   <Button className="w-full justify-start h-auto py-4" variant="outline">
-                    <FileText className="h-4 w-4 mr-2" />
-                    View All Cases
+                    <MessageSquare className="h-4 w-4 mr-2" />
+                    View Chat History
                   </Button>
                   <Button className="w-full justify-start h-auto py-4" variant="outline">
                     <Search className="h-4 w-4 mr-2" />

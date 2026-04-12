@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Square, Plus } from "lucide-react";
+import { Send, Square, Plus, Zap, Search } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
+import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { InvestigationReport } from "@/components/InvestigationReport";
@@ -12,6 +13,8 @@ import { useCaseFiles, type CaseFile } from "@/contexts/CaseFilesContext";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { apiClient } from "@/api/api";
+import { sessionApi } from "@/api/sessionApi";
+import { streamQuickSearch } from "@/api/quickSearchApi";
 import { useInvestigation } from "@/hooks/useInvestigation";
 import type { ReportMetadata, GeolocationItem, ReportSource } from "@/types/index";
 import type { ReferenceItem } from "@/components/InvestigationReferences";
@@ -22,7 +25,10 @@ import { createMessageId } from "@/services/chatService";
 import type { Message as AgUiMessage } from "@/types/chat";
 import type { ChatRunInput } from "@/services/chatService";
 
-const STAGE_POOLS: Record<string, string[]> = {
+type SearchMode = "deep" | "quick";
+
+
+const AGENT_STAGE_POOLS: Record<string, string[]> = {
   "planning-agent": [
     "Structuring analytical findings",
     "Mapping query parameters",
@@ -94,7 +100,17 @@ const STAGE_POOLS: Record<string, string[]> = {
   ],
 };
 
-/** Inline HITL review card — shown in the chat stream, not as an overlay. */
+interface HitlStateData {
+  agent: string;
+  description: string;
+  threadId: string;
+  content_type?: string;
+  content?: string;
+  sources?: { title: string; url: string; summary: string }[];
+  editable?: boolean;
+}
+
+/** Inline HITL review card — shown in the chat stream during deep-search investigations. */
 const HitlInlineCard = ({
   hitlState,
   hitlEditedContent,
@@ -105,13 +121,7 @@ const HitlInlineCard = ({
   onReject,
   className = "",
 }: {
-  hitlState: {
-    agent: string;
-    content_type?: string;
-    content?: string;
-    sources?: { title: string; url: string; summary: string }[];
-    editable?: boolean;
-  };
+  hitlState: HitlStateData;
   hitlEditedContent: string;
   setHitlEditedContent: (v: string) => void;
   hitlAdditionalUrls: string;
@@ -121,7 +131,6 @@ const HitlInlineCard = ({
   className?: string;
 }) => (
   <div className={`rounded-lg border bg-card shadow-sm flex flex-col ${className}`}>
-    {/* Header */}
     <div className="px-5 pt-4 pb-3 border-b border-border">
       <p className="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-0.5">
         {hitlState.content_type === "plan"
@@ -133,7 +142,6 @@ const HitlInlineCard = ({
       <h3 className="text-sm font-semibold text-foreground">{hitlState.agent}</h3>
     </div>
 
-    {/* Body */}
     <div className="px-5 py-4 space-y-3">
       {hitlState.content_type === "plan" && (
         <>
@@ -183,7 +191,6 @@ const HitlInlineCard = ({
       )}
     </div>
 
-    {/* Footer */}
     <div className="px-5 py-3 border-t border-border flex gap-2 justify-end">
       <button onClick={onReject} className="px-3 py-1.5 text-sm rounded-md border border-border text-muted-foreground hover:bg-muted transition-colors">
         Stop
@@ -227,6 +234,7 @@ interface MessageAttachment {
   isRussellCherryReport?: boolean;
   isIranianPetrochemicalsReport?: boolean;
   isInvestigationApiReport?: boolean;
+  isQuickSearchMarkdown?: boolean;
   selectedAccount?: string;
 }
 
@@ -282,12 +290,28 @@ export const ChatInterface = () => {
   const [reportDuration, setReportDuration] = useState<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const elapsedRef = useRef(0);
-  const estimatedSecsRef = useRef(240);
   const activeThreadId = useRef<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const investigateAbortRef = useRef<AbortController | null>(null);
+  const estimatedSecsRef = useRef(240);
+
+  const [searchMode, setSearchMode] = useState<SearchMode>("deep");
+  const modeRef = useRef<SearchMode>("deep");
+  const quickAbortRef = useRef<AbortController | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
+
+  const [hitlState, setHitlState] = useState<HitlStateData | null>(null);
+  const [hitlEditedContent, setHitlEditedContent] = useState("");
+  const [hitlAdditionalUrls, setHitlAdditionalUrls] = useState("");
+
+  const stageCycleRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stagePoolRef = useRef<string[]>([]);
+  const stageIndexRef = useRef(0);
 
   const startStageCycling = useCallback((agent: string) => {
     if (stageCycleRef.current) clearInterval(stageCycleRef.current);
-    const pool = STAGE_POOLS[agent] ?? STAGE_POOLS["research-agent"];
+    const pool = AGENT_STAGE_POOLS[agent] ?? AGENT_STAGE_POOLS["research-agent"];
     stagePoolRef.current = pool;
     stageIndexRef.current = 0;
     setLoadingStages([pool[0]]);
@@ -304,23 +328,10 @@ export const ChatInterface = () => {
     }
   }, []);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const investigateAbortRef = useRef<AbortController | null>(null);
-  const [hitlState, setHitlState] = useState<{
-    agent: string;
-    description: string;
-    threadId: string;
-    content_type?: string;
-    content?: string;
-    sources?: { title: string; url: string; summary: string }[];
-    editable?: boolean;
-  } | null>(null);
-  const [hitlEditedContent, setHitlEditedContent] = useState<string>("");
-  const [hitlAdditionalUrls, setHitlAdditionalUrls] = useState<string>("");
-  const stageCycleRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const stagePoolRef = useRef<string[]>([]);
-  const stageIndexRef = useRef(0);
+  useEffect(() => {
+    modeRef.current = searchMode;
+  }, [searchMode]);
+
   const navigate = useNavigate();
   const location = useLocation();
   const { addCaseFile } = useCaseFiles();
@@ -335,6 +346,7 @@ export const ChatInterface = () => {
     }
     console.log("ChatInterface: performInvestigationApi: reportMeta:", reportMeta);
     setActiveTaskId(reportMeta.id);
+
     return new Promise((resolve, reject) => {
       console.log("Initiating SSE stream...");
 
@@ -393,13 +405,78 @@ export const ChatInterface = () => {
         },
       );
 
-      // Handle user cancellation
       investigateAbortRef.current?.signal?.addEventListener("abort", () => {
         connection.close();
         reject(new Error("Investigation cancelled"));
       });
     });
   }, [startStageCycling, stopStageCycling]);
+
+  const performQuickSearch = useCallback(
+    (content: string, sessionId?: string | null): Promise<{ id: string; role: "assistant"; content: string }[]> => {
+      return new Promise((resolve) => {
+        const assistantMsgId = createMessageId();
+
+        quickAbortRef.current = new AbortController();
+
+        setLoadingStages(["Analysing query…"]);
+
+        streamQuickSearch(
+          content,
+          (statusText) => {
+            setLoadingStages([statusText]);
+          },
+          (report) => {
+            setLoadingStages([]);
+            if (report && report.content) {
+              setAttachmentByMessageId((prev) => ({
+                ...prev,
+                [assistantMsgId]: report.references?.length
+                  ? {
+                      isInvestigationApiReport: true,
+                      reportContent: report.content,
+                      geolocations: report.geolocations ?? [],
+                      references: report.references as unknown as ReferenceItem[],
+                    }
+                  : { isQuickSearchMarkdown: true, reportContent: report.content },
+              }));
+              if (sessionId) {
+                void sessionApi
+                  .appendMessage(sessionId, "ASSISTANT", report.content, "REPORT")
+                  .catch(() => {});
+              }
+              resolve([
+                { id: assistantMsgId, role: "assistant" as const, content: "Quick Search Result" },
+              ]);
+            } else {
+              resolve([
+                {
+                  id: assistantMsgId,
+                  role: "assistant" as const,
+                  content: "No results returned. Please try rephrasing your query.",
+                },
+              ]);
+            }
+            quickAbortRef.current = null;
+          },
+          (detail) => {
+            setLoadingStages([]);
+            toast.error("Quick search failed: " + detail);
+            resolve([
+              {
+                id: assistantMsgId,
+                role: "assistant" as const,
+                content: `Quick search failed: ${detail}`,
+              },
+            ]);
+            quickAbortRef.current = null;
+          },
+          quickAbortRef.current.signal,
+        );
+      });
+    },
+    [],
+  );
 
   const transport = useCallback<NonNullable<UseChatOptions["transport"]>>(
     async (input: ChatRunInput) => {
@@ -408,7 +485,23 @@ export const ChatInterface = () => {
         typeof lastUser?.content === "string" ? lastUser.content.trim() : "";
       if (!content) return [];
 
-      // Estimate duration from word count: base 180s + 12s/word, clamped 120–480s
+      // Create a new DB session on first message of a conversation, reuse on follow-ups.
+      let sessionId = sessionIdRef.current;
+      try {
+        if (!sessionId) {
+          const session = await sessionApi.create(content.slice(0, 100));
+          sessionId = session.id;
+          sessionIdRef.current = sessionId;
+        }
+        void sessionApi.appendMessage(sessionId, "USER", content, "TEXT");
+      } catch {
+        // Session persistence is best-effort; don't block the investigation.
+      }
+
+      if (modeRef.current === "quick") {
+        return performQuickSearch(content, sessionId);
+      }
+
       const wordCount = content.split(/\s+/).filter(Boolean).length;
       estimatedSecsRef.current = Math.min(Math.max(180 + wordCount * 12, 120), 480);
 
@@ -436,26 +529,15 @@ export const ChatInterface = () => {
           }));
           return [{ id, role: "assistant" as const, content: "Russell Cherry X Account Search" }];
         }
-        if (content.toLowerCase().includes("roman abramovich")) {
-          setLoadingStages([
-            "Understanding request",
-            "Gathering intelligence data",
-            "Analyzing connections and affiliations",
-            "Compiling comprehensive report",
-          ]);
-          await new Promise((r) => setTimeout(r, 6000));
-          const id = createMessageId();
-          setAttachmentByMessageId((prev) => ({ ...prev, [id]: { isReport: true } }));
-          return [{ id, role: "assistant" as const, content: "Roman Abramovich" }];
-        }
 
 
-        const result = await performInvestigationApi(content) as { id: string; reportId: string; name: string; content: string; geolocations: any[]; references: any[] };
+        const result = await performInvestigationApi(content) as {
+          id: string; reportId: string; name: string; content: string;
+          geolocations: GeolocationItem[]; references: ReferenceItem[];
+        };
         const capturedDuration = elapsedRef.current;
         setReportDuration(capturedDuration);
 
-        // Inject the report as an assistant message so it lands in the correct
-        // position in the chat stream (directly after the user's query).
         const reportMsgId = createMessageId();
         setAttachmentByMessageId((prev) => ({
           ...prev,
@@ -467,7 +549,6 @@ export const ChatInterface = () => {
           },
         }));
 
-        // Save to case files in the background (non-blocking for the user)
         const caseFileMessages: CaseFile["messages"] = input.messages
           .filter((m) => m.role === "user" || m.role === "assistant")
           .map((m) => ({
@@ -484,16 +565,21 @@ export const ChatInterface = () => {
           caseNumber: result.reportId || `INV-${Date.now().toString().slice(-6)}`,
           subject: content.slice(0, 100),
           timestamp: Date.now(),
-          category: content.toLowerCase().includes("russell cherry")
-            ? "Russell Cherry"
-            : content.toLowerCase().includes("roman abramovich")
-              ? "Roman Abramovich"
-              : content.toLowerCase().includes("iranian petrochemical")
-                ? "Iranian Petrochemicals"
-                : "Other",
+          category: "Other",
           messages: caseFileMessages,
         });
         toast.success("Investigation saved to case files");
+        if (sessionId) {
+          void sessionApi
+            .appendMessage(
+              sessionId,
+              "ASSISTANT",
+              result.name || "Investigation Report",
+              "REPORT",
+              result.reportId || undefined,
+            )
+            .catch(() => {});
+        }
         return [{ id: reportMsgId, role: "assistant" as const, content: result.name || "Investigation Report" }];
       } catch (err: unknown) {
         if (axios.isCancel(err)) {  
@@ -524,7 +610,7 @@ export const ChatInterface = () => {
         setHitlState(null);
       }
     },
-    [performInvestigationApi, addCaseFile]
+    [performInvestigationApi, performQuickSearch, addCaseFile, stopStageCycling]
   );
 
   const handleHitlApprove = useCallback(async () => {
@@ -597,6 +683,7 @@ export const ChatInterface = () => {
   // Reset chat when navigating back to home
   useEffect(() => {
     if (location.pathname === "/" && location.state?.resetChat) {
+      sessionIdRef.current = null;
       reset();
       setAttachmentByMessageId({});
       setPendingReports([]);
@@ -672,6 +759,8 @@ export const ChatInterface = () => {
   );
 
   const handleReset = useCallback(() => {
+    quickAbortRef.current?.abort();
+    sessionIdRef.current = null;
     reset();
     setAttachmentByMessageId({});
     setPendingReports([]);
@@ -683,6 +772,7 @@ export const ChatInterface = () => {
 
   const handleStop = useCallback(() => {
     investigateAbortRef.current?.abort();
+    quickAbortRef.current?.abort();
     reset();
     setLoadingStages([]);
     toast.info("Investigation stopped");
@@ -706,6 +796,18 @@ export const ChatInterface = () => {
           )}
         >
           <p className="whitespace-pre-wrap">{typeof msg.content === "string" ? msg.content : ""}</p>
+        </div>
+      );
+    }
+    if (attachment?.isQuickSearchMarkdown && attachment.reportContent) {
+      return (
+        <div
+          key={msg.id}
+          className="rounded-lg p-6 text-sm max-w-2xl bg-background text-foreground border border-border shadow-sm prose prose-sm dark:prose-invert max-w-none"
+          data-message-id={msg.id}
+          data-role="assistant"
+        >
+          <ReactMarkdown>{attachment.reportContent}</ReactMarkdown>
         </div>
       );
     }
@@ -752,7 +854,7 @@ export const ChatInterface = () => {
     );
   };
 
-  const hasMessages = messages.length > 0 || pendingReports.length > 0;
+  const hasMessages = messages.length > 0 || pendingReports.length > 0 || pendingApiReports.length > 0;
 
   return (
     <div className="flex flex-col h-full">
@@ -832,6 +934,34 @@ export const ChatInterface = () => {
                 </button>
               )}
             </div>
+            <div className="flex items-center gap-1 mt-2 px-1">
+              <button
+                type="button"
+                onClick={() => setSearchMode("deep")}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+                  searchMode === "deep"
+                    ? "bg-primary/10 text-primary border border-primary/30"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                )}
+              >
+                <Search className="h-3.5 w-3.5" />
+                Deep Research
+              </button>
+              <button
+                type="button"
+                onClick={() => setSearchMode("quick")}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+                  searchMode === "quick"
+                    ? "bg-primary/10 text-primary border border-primary/30"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                )}
+              >
+                <Zap className="h-3.5 w-3.5" />
+                Quick Search
+              </button>
+            </div>
           </form>
           <div className="mt-6 w-full max-w-3xl mx-auto">
             <p className="mb-3 text-xs text-muted-foreground text-center">Suggested examples</p>
@@ -896,6 +1026,16 @@ export const ChatInterface = () => {
                   {pr.duration != null && (
                     <p className="mt-4 text-xs text-muted-foreground text-right">Analysis completed in {formatDuration(pr.duration)}</p>
                   )}
+                </div>
+              ))}
+              {pendingApiReports.map((pr) => (
+                <div key={pr.id} className="rounded-lg p-4 text-sm max-w-2xl bg-background text-foreground border border-border shadow-sm">
+                  <InvestigationApiReport
+                    content={pr.content}
+                    geolocations={pr.geolocations}
+                    references={pr.references}
+                  />
+                  <p className="mt-4 text-xs text-muted-foreground text-right">Analysis completed in {formatDuration(pr.duration)}</p>
                 </div>
               ))}
               {isLoading && (
@@ -979,9 +1119,37 @@ export const ChatInterface = () => {
                   </button>
                 )}
               </div>
-              <p className="mt-2 text-xs text-muted-foreground px-4">
-                Press Enter to send, Shift+Enter for new line.
-              </p>
+              <div className="flex items-center gap-1 mt-2 px-1">
+                <button
+                  type="button"
+                  onClick={() => setSearchMode("deep")}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+                    searchMode === "deep"
+                      ? "bg-primary/10 text-primary border border-primary/30"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  )}
+                >
+                  <Search className="h-3.5 w-3.5" />
+                  Deep Research
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSearchMode("quick")}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+                    searchMode === "quick"
+                      ? "bg-primary/10 text-primary border border-primary/30"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  )}
+                >
+                  <Zap className="h-3.5 w-3.5" />
+                  Quick Search
+                </button>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  Press Enter to send, Shift+Enter for new line.
+                </span>
+              </div>
             </form>
           </div>
         </>

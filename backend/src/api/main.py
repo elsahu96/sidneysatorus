@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from src.api import investigate, report, user, cases, workspace
+from src.api import investigate, report, user, cases, workspace, sessions, quick_search
 from src.service.auth import verify_token
 from src.data import init_data_factory, shutdown_data_factory
 import firebase_admin
@@ -96,6 +96,8 @@ app.include_router(report.app, tags=["reports"])
 app.include_router(user.app, tags=["user"])
 app.include_router(cases.app)
 app.include_router(workspace.app)
+app.include_router(sessions.app)
+app.include_router(quick_search.app)
 
 
 @app.get("/")

@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
+import asyncio
 import secrets
 import time
 from urllib.parse import urlencode
@@ -10,11 +11,16 @@ import hmac
 class StorageService(ABC):
     @abstractmethod
     async def get_download_url(self, storage_path: str, expires_in: int = 900) -> str:
-        """返回一个有时效的下载 URL"""
+        """Return a time-limited download URL for the given storage path."""
         pass
 
     @abstractmethod
     async def file_exists(self, storage_path: str) -> bool:
+        pass
+
+    @abstractmethod
+    async def write_bytes(self, storage_path: str, data: bytes, content_type: str = "application/octet-stream") -> None:
+        """Write raw bytes to the given storage path."""
         pass
 
 
@@ -42,6 +48,11 @@ class LocalStorageService(StorageService):
     async def file_exists(self, storage_path: str) -> bool:
         return (self.base_dir / storage_path).exists()
 
+    async def write_bytes(self, storage_path: str, data: bytes, content_type: str = "application/octet-stream") -> None:
+        dest = self.base_dir / storage_path
+        await asyncio.to_thread(dest.parent.mkdir, parents=True, exist_ok=True)
+        await asyncio.to_thread(dest.write_bytes, data)
+
 
 # ── GCS（之后切换用这个）────────────────────────────────
 class GCSStorageService(StorageService):
@@ -59,3 +70,7 @@ class GCSStorageService(StorageService):
 
     async def file_exists(self, storage_path: str) -> bool:
         return self.bucket.blob(storage_path).exists()
+
+    async def write_bytes(self, storage_path: str, data: bytes, content_type: str = "application/octet-stream") -> None:
+        blob = self.bucket.blob(storage_path)
+        await asyncio.to_thread(blob.upload_from_string, data, content_type=content_type)

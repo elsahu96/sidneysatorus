@@ -302,38 +302,18 @@ async def delete_project_document(db: Prisma, doc_id: str) -> bool:
 
 
 # ── Chat Sessions & Messages ──────────────────────────────────────────────────
-
-async def create_chat_session(db: Prisma, session_id: str) -> dict[str, Any]:
-    session = await db.chatsession.create(
-        data={"id": session_id, "messages": []}
-    )
-    return session.model_dump()
-
+# Low-level CRUD helpers.  Business logic (sliding window, archival) lives in
+# src/service/chat_session_service.py — use ChatSessionService from there.
 
 async def get_or_create_chat_session(db: Prisma, session_id: str) -> dict[str, Any]:
+    """Upsert a bare session by ID (no user, no title). Legacy helper."""
     session = await db.chatsession.find_unique(where={"id": session_id})
     if session:
         return session.model_dump()
-    return await create_chat_session(db, session_id)
-
-
-async def add_message(
-    db: Prisma,
-    session_id: str,
-    role: str,
-    content: str,
-    metadata: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """role must be 'USER' or 'ASSISTANT'."""
-    msg_data: dict[str, Any] = {
-        "chatSessionId": session_id,
-        "role": role,
-        "content": content,
-    }
-    if metadata is not None:
-        msg_data["metadata"] = Json(metadata)
-    message = await db.message.create(data=msg_data)
-    return message.model_dump()
+    session = await db.chatsession.create(
+        data={"id": session_id, "contextWindow": Json([])}
+    )
+    return session.model_dump()
 
 
 async def list_messages(

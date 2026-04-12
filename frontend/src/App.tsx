@@ -12,6 +12,7 @@ import CaseFiles from "@/pages/CaseFiles";
 import CaseDetail from "@/pages/CaseDetail";
 import Admin from "@/pages/Admin";
 import DarkWeb from "@/pages/DarkWeb";
+import SessionHistory from "@/pages/SessionHistory";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -71,6 +72,14 @@ const App = () => (
                   element={
                     <AuthGuard>
                       <DarkWeb />
+                    </AuthGuard>
+                  }
+                />
+                <Route
+                  path="/sessions"
+                  element={
+                    <AuthGuard>
+                      <SessionHistory />
                     </AuthGuard>
                   }
                 />

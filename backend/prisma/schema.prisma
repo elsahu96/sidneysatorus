@@ -13,21 +13,31 @@ datasource db {
 
 
 model ChatSession {
-  id        String    @id
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  messages  String[]
+  id            String    @id @default(cuid())
+  userId        String?   @map("user_id")
+  title         String    @default("")
+  summary       String?
+  contextWindow Json?     @map("context_window")  // Hot cache: last N messages as JSONB
+  blobPointer   String?   @map("blob_pointer")    // URI to full archive in GCS/local
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  messages      Message[]
+  user          User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  @@index([userId])
   @@map("chat_sessions")
 }
 
 model Message {
-  id        String      @id @default(cuid())
-  role      MessageRole
-  content   String      // Text content of the message
-  metadata  Json?       // For tokens, tool_calls, etc.
-  createdAt DateTime    @default(now())
+  id            String      @id @default(cuid())
+  role          MessageRole
+  messageType   MessageType @default(TEXT) @map("message_type")
+  content       String      // For TEXT: full text. For REPORT: display title only.
+  reportRef     String?     @map("report_ref")  // Report ID or GCS path for REPORT messages
+  metadata      Json?
+  tokenCount    Int?        @map("token_count")
+  createdAt     DateTime    @default(now())
   chatSessionId String
-
+  session       ChatSession @relation(fields: [chatSessionId], references: [id], onDelete: Cascade)
   @@index([chatSessionId, createdAt])
   @@map("messages")
 }
@@ -43,6 +53,7 @@ model User {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   memberships    TeamMembership[]
+  chatSessions   ChatSession[]
   @@map("users")
 }
 
@@ -136,4 +147,9 @@ model TeamMembership {
 enum MessageRole {
   USER
   ASSISTANT
+}
+
+enum MessageType {
+  TEXT
+  REPORT
 }

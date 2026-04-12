@@ -3,10 +3,10 @@ import { api } from "./client";
 import { auth } from "@/firebase";
 
 export const investigateApi = {
-  start: (query: string, opts?: { signal?: AbortSignal }) => {
-    console.log("[investigate] req:", query);
+  start: (query: string, opts?: { signal?: AbortSignal; quickSearch?: boolean }) => {
+    console.log("[investigate] req:", query, opts?.quickSearch ? "(quick)" : "");
     return api
-      .post("/investigate", { query }, { signal: opts?.signal })
+      .post("/investigate", { query, quick_search: opts?.quickSearch ?? false }, { signal: opts?.signal })
       .then((r) => ({
         id: r.data.thread_id || r.data.id || r.data.task_id,
         status: r.data.status,
