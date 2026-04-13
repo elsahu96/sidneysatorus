@@ -12,7 +12,7 @@
 #                                  serviceAccountUser on Cloud Run runtime SAs — see GITHUB_ACTIONS_GCP.md)
 #
 # Required GitHub Variables (Settings → Secrets and variables → Actions → Variables):
-#   VITE_API_URL — public backend HTTPS URL (no trailing slash)
+#   VITE_API_URL — public backend HTTPS URL (no trailing slash) Test
 # Optional (frontend build): match frontend_env.txt — VITE_WS_URL, VITE_MAPBOX_*,
 #   VITE_FIREBASE_*, VITE_SATORUS_TENANT_ID (same names as in repo root frontend_env.txt)
 #
