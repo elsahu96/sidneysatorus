@@ -16,10 +16,10 @@
 - For complex problems, throw more compute at it via subagents
 - One task per subagent for focused execution
 
-### 3. PLZ Don't Make Errors, PLZ PLZ, The CTO Is Gonna Kill Me
+### 3. Test Everything before you finish 
 
-- The CTO has a spreadsheet. Your mistakes are on it. My name is turning red. PLZ.
-- If you make the same mistake twice, update tasks/lessons.md
+- Write unit tests, regression tests, and integration tests for the new feature you develop.
+- DO NOT over complicate the test cases.
 
 ### 4. Demand Elegance (Balanced)
 
@@ -31,9 +31,24 @@
 ### 5. Autonomous Bug Fixing
 
 - When given a bug report: just fix it. Don't ask for hand-holding
-- Point at logs, errors, failing tests B then resolve them
+- Point at logs, errors, failing tests — then resolve them
 - Zero context switching required from the user
 - Go fix failing CI tests without being told how
+
+### 6. Debug Log — Always Update After Fixing a Bug
+
+`documentation/DEBUG.md` is the permanent bug record for this project.
+
+**After fixing any non-trivial bug:**
+1. Open `documentation/DEBUG.md`
+2. Add a new entry using the `[BUG-NNN]` template at the top of the file
+3. Fill in: Symptom, Timeline, Root Cause, Contributing Factors, Evidence (log lines / stack traces), Fix (files + diffs), Verification, and Follow-up actions
+4. Use RCA methodology — focus on *why* the bug existed, not just *what* broke
+
+**Before investigating a bug:**
+1. Scan `documentation/DEBUG.md` for prior entries in the same component
+2. Check "Contributing Factors" and "Follow-up" sections — the fix may already be documented or a related pattern may apply
+3. Check whether a previous "misleading error message" note applies (e.g. `Separator is not found` appears in both Gemini API errors and Python asyncio StreamReader errors — see BUG-001)
 
 # CLAUDE.md
 
