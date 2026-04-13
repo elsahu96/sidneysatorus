@@ -252,13 +252,17 @@ async def start_investigate(
     thread_id = request.thread_id or str(uuid.uuid4())
     logger.info("POST /investigate thread_id=%s uid=%s", thread_id, user["uid"])
 
-    cmd = [sys.executable, _RUNNER, "--query", query, "--thread-id", thread_id]
-
     proc = await asyncio.create_subprocess_exec(
-        *cmd,
+        sys.executable,
+        _RUNNER,
+        "--query",
+        query,
+        "--thread-id",
+        thread_id,
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        limit=10 * 1024 * 1024,  # 10 MB — default 64 KB is too small for large HITL payloads
     )
     _active[thread_id] = proc
     _event_queues[thread_id] = asyncio.Queue()

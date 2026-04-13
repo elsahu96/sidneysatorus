@@ -28,9 +28,23 @@ def _on_progress(agent_name: str) -> None:
     print(f"PROGRESS:{agent_name}", flush=True)
 
 
+_HITL_CONTENT_LIMIT = 50_000   # chars — cap per-field to keep the stdout line under 10 MB
+_HITL_SOURCES_LIMIT = 60       # max sources to include in the HITL payload
+
+
+def _truncate_hitl(data: dict) -> dict:
+    """Trim large fields so the serialised HITL line stays well inside the stream limit."""
+    out = dict(data)
+    if isinstance(out.get("content"), str) and len(out["content"]) > _HITL_CONTENT_LIMIT:
+        out["content"] = out["content"][:_HITL_CONTENT_LIMIT] + "\n\n[truncated]"
+    if isinstance(out.get("sources"), list) and len(out["sources"]) > _HITL_SOURCES_LIMIT:
+        out["sources"] = out["sources"][:_HITL_SOURCES_LIMIT]
+    return out
+
+
 def _on_hitl(hitl_data: dict) -> dict:
     """Send HITL event to stdout, block until decision arrives on stdin."""
-    print(f"HITL:{json.dumps(hitl_data)}", flush=True)
+    print(f"HITL:{json.dumps(_truncate_hitl(hitl_data))}", flush=True)
     try:
         line = sys.stdin.readline().strip()
         return json.loads(line)
