@@ -6,7 +6,7 @@
 #     projects/695960491029/locations/global/workloadIdentityPools/github-pool/providers/github-provider
 #   GCP_SERVICE_ACCOUNT_EMAIL_PROD =
 #     gh-actions-gar@satorus-sidney.iam.gserviceaccount.com
-# (695960491029 = gcloud projects describe satorus-sidney --format='value(projectNumber)'.)
+# (695960491029 = gcloud projects describe satorus-sidney --format='value(projectNumber)'.).
 #
 # VITE_* for prod: set secret or variable VITE_API_URL_PROD (prod backend HTTPS URL). Optional *_PROD secrets
 # override staging-named secrets when prod Firebase/Supabase/tenant differs (see build-args fallbacks).
