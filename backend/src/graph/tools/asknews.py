@@ -123,6 +123,14 @@ class Article(TypedDict):
     countrycode: str
 
 
+# ── Side-channel for full-field article data (used by grading system) ───────
+# The Gemini-safe Article TypedDict above is kept minimal to avoid chunk-limit
+# errors.  The grading system needs additional AskNews fields (page_rank,
+# reporting_voice, key_points, etc.) which are stored here, keyed by URL.
+# This mirrors the _last_write_result pattern in writer.py.
+_last_raw_articles: dict[str, dict] = {}
+
+
 def _to_unix(pub_date) -> int:
     if pub_date is None:
         return 0
@@ -212,6 +220,21 @@ def _run_single_search(
             language=_sanitize(str(getattr(article, "language", "") or "")),
             countrycode=_sanitize(str(getattr(article, "country", "") or "")),
         ))
+
+        # Store full-field data in side-channel for the grading system.
+        # These fields are NOT passed through Gemini to avoid chunk-limit issues.
+        if url:
+            _last_raw_articles[url] = {
+                "page_rank": getattr(article, "page_rank", None),
+                "reporting_voice": str(getattr(article, "reporting_voice", "") or ""),
+                "bias": str(getattr(article, "bias", "") or ""),
+                "provocative": str(getattr(article, "provocative", "") or ""),
+                "authors": list(getattr(article, "authors", None) or []),
+                "key_points": list(getattr(article, "key_points", None) or []),
+                "keywords": list(getattr(article, "keywords", None) or []),
+                "classification": str(getattr(article, "classification", "") or ""),
+            }
+
     live = _filter_live_urls([dict(a) for a in raw])
     live_urls = {a["url"] for a in live}
     return [a for a in raw if a["url"] in live_urls][:n_articles]

@@ -459,8 +459,50 @@ def run_pipeline_stages(
             f"- {u}" for u in additional_urls
         )
 
-    # ── Stage 2.5: Confirm report format (pre-writer) ────────────────────────
+    # ── Stage 2.5: Source grading ────────────────────────────────────────────
+    on_progress("grading-sources")
+    from src.graph.grading import grade_articles
+    from src.graph.tools.asknews import _last_raw_articles
+    from src.graph.grading.config import INVESTIGATION_PROFILE_MAP
+
+    # Merge AskNews side-channel data into article dicts for grading
+    enriched_articles = []
+    for art in articles:
+        url = art.get("url", "")
+        enriched = {**art}
+        if url in _last_raw_articles:
+            enriched.update(_last_raw_articles[url])
+        enriched_articles.append(enriched)
+
+    # Select grading profile based on investigation type (from plan) or default
+    grading_profile = "default"
+    plan_lower = refined_plan.lower()
+    for inv_type, profile in INVESTIGATION_PROFILE_MAP.items():
+        if inv_type.lower().replace("_", " ") in plan_lower:
+            grading_profile = profile
+            break
+
+    graded_articles = grade_articles(enriched_articles, profile=grading_profile)
+
+    # Build grading summary for the writer
+    grading_summary_lines = [f"\nSource Grading (profile: {grading_profile}):"]
+    for i, ga in enumerate(graded_articles, 1):
+        grade = ga.get("grade", "?")
+        score = ga.get("composite_score", 0)
+        domain = ga.get("url", "").split("/")[2] if "://" in ga.get("url", "") else ga.get("url", "")
+        signals = ga.get("analyst_signals", [])
+        signal_text = "; ".join(s.get("text", "") for s in signals[:2]) if signals else ""
+        grading_summary_lines.append(f"  [{i}] {domain} — Grade: {grade} ({score}/100) — {signal_text}")
+    grading_context = "\n".join(grading_summary_lines)
+
+    # ── Stage 2.75: Confirm report format (pre-writer) ──────────────────────
     source_count = len(sources_for_hitl) + len(additional_urls)
+    grade_dist: dict[str, int] = {}
+    for ga in graded_articles:
+        g = ga.get("grade", "?")
+        grade_dist[g] = grade_dist.get(g, 0) + 1
+    grade_dist_str = ", ".join(f"{g}: {c}" for g, c in sorted(grade_dist.items()))
+
     decision = hitl(
         {
             "agent": "writer-agent",
@@ -468,8 +510,10 @@ def run_pipeline_stages(
             "content": (
                 f"Ready to write the intelligence report.\n\n"
                 f"• {source_count} sources collected\n"
+                f"• Source grades: {grade_dist_str}\n"
+                f"• Grading profile: {grading_profile}\n"
                 f"• Sections: Executive Summary · Detailed Analysis · Risk Factors · Sources\n"
-                f"• Format: Structured JSON with inline citations"
+                f"• Format: Structured JSON with inline citations and source grades"
             ),
             "editable": False,
         }
@@ -505,26 +549,54 @@ def run_pipeline_stages(
 
     writer_prompt = _asknews_sanitize(
         f"Investigation task: {task}\n\n"
-        f"Research findings:\n{research_summary}" + additional_context
+        f"Research findings:\n{research_summary}"
+        + additional_context
+        + "\n\n" + grading_context
     )
     writer_runner.invoke({"messages": [HumanMessage(content=writer_prompt)]})
 
     json_path = _last_write_result.get("json_path")
     if json_path:
         logger.info("Pipeline complete. Report written to: %s", json_path)
-        # Overwrite the LLM-generated title with the original user query so the
-        # report is labelled consistently throughout the UI.
+        # Post-write: patch report title and inject source grading metadata
         try:
             import json as _json
 
             _p = __import__("pathlib").Path(json_path)
             _data = _json.loads(_p.read_text(encoding="utf-8"))
             _data.setdefault("metadata", {})["title"] = task
+
+            # Inject grading data into each source and add grading summary
+            report_sources = _data.get("report", {}).get("sources", [])
+            graded_by_url = {ga.get("url", ""): ga for ga in graded_articles}
+            for src in report_sources:
+                url = src.get("url", "")
+                ga = graded_by_url.get(url)
+                if ga:
+                    src["grade"] = ga.get("grade", "")
+                    src["composite_score"] = ga.get("composite_score", 0)
+                    src["factor_scores"] = ga.get("factor_scores", {})
+                    src["analyst_signals"] = [
+                        s.get("text", "") for s in ga.get("analyst_signals", [])
+                    ]
+
+            # Add top-level source_grading summary
+            avg_score = (
+                sum(ga.get("composite_score", 0) for ga in graded_articles) // len(graded_articles)
+                if graded_articles else 0
+            )
+            _data["source_grading"] = {
+                "profile_used": grading_profile,
+                "grade_distribution": grade_dist,
+                "average_score": avg_score,
+                "total_sources_graded": len(graded_articles),
+            }
+
             _p.write_text(
                 _json.dumps(_data, ensure_ascii=False, indent=2), encoding="utf-8"
             )
         except Exception as _e:
-            logger.warning("Could not patch report title: %s", _e)
+            logger.warning("Could not patch report with grading data: %s", _e)
     else:
         logger.warning("Writer agent did not produce a json_path.")
     return json_path
