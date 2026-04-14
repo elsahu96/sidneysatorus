@@ -5,11 +5,24 @@ export interface GeolocationItem {
   context: string;
 }
 
+export interface SourceFactorScores {
+  factual_reliability: number;
+  source_authority: number;
+  bias_objectivity: number;
+  attribution_quality: number;
+  press_environment: number;
+  corroboration: number;
+}
+
 export interface ReportSource {
   title: string;
   url: string;
   date: string;
   key_insight: string;
+  grade?: string;
+  composite_score?: number;
+  factor_scores?: SourceFactorScores;
+  analyst_signals?: string[];
 }
 
 export interface ReportMetadata {
