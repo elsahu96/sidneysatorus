@@ -22,7 +22,7 @@ export interface ReportSource {
   grade?: string;
   composite_score?: number;
   factor_scores?: SourceFactorScores;
-  analyst_signals?: string[];
+  analyst_signals?: Array<{ text: string; sentiment?: string }>;
 }
 
 export interface ReportMetadata {

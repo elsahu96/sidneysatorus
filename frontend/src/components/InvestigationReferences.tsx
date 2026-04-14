@@ -17,7 +17,7 @@ export type ReferenceItem = {
     press_environment: number;
     corroboration: number;
   };
-  analyst_signals?: string[];
+  analyst_signals?: Array<{ text: string; sentiment?: string }>;
 };
 
 interface InvestigationReferencesProps {

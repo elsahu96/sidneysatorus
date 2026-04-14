@@ -577,7 +577,8 @@ def run_pipeline_stages(
                     src["composite_score"] = ga.get("composite_score", 0)
                     src["factor_scores"] = ga.get("factor_scores", {})
                     src["analyst_signals"] = [
-                        s.get("text", "") for s in ga.get("analyst_signals", [])
+                        {"text": s.get("text", ""), "sentiment": s.get("sentiment", "neutral")}
+                        for s in ga.get("analyst_signals", [])
                     ]
 
             # Add top-level source_grading summary

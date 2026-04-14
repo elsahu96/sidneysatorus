@@ -71,6 +71,10 @@ def _parse_report_json(data: dict) -> dict:
             "url": s.get("url", ""),
             "date": s.get("date", ""),
             "key_insight": s.get("key_insight", ""),
+            "grade": s.get("grade"),
+            "composite_score": s.get("composite_score"),
+            "factor_scores": s.get("factor_scores"),
+            "analyst_signals": s.get("analyst_signals"),
         }
         for s in raw_sources
     ]
