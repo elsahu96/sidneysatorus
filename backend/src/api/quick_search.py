@@ -55,8 +55,8 @@ async def quick_search(
             client = genai.Client(api_key=_GEMINI_API_KEY)
             model = _model_name_for_genai(_MODEL_NAME)
 
-            system_prompt = QUICK_RESEARCH_AGENT_PROMPT.replace(
-                "%current_date%", date.today().isoformat()
+            system_prompt = QUICK_RESEARCH_AGENT_PROMPT.format(
+                current_date=date.today().isoformat()
             )
 
             response = await client.aio.models.generate_content_stream(
