@@ -21,7 +21,6 @@ import type { SessionRecord, SessionMessage } from "@/api/sessionApi";
 import type { ReportMetadata } from "@/types/index";
 import type { ReferenceItem } from "@/components/InvestigationReferences";
 import { InvestigationApiReport } from "@/components/ChatInterface";
-import ReactMarkdown from "react-markdown";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -157,12 +156,10 @@ function ChatMessageBubble({ msg }: { msg: SessionMessage }) {
   // REPORT with inline markdown content (quick search path — no reportRef)
   if (isReport) {
     return (
-      <div className="flex flex-col items-start gap-1">
+      <div className="flex flex-col items-start gap-1 w-full">
         <span className="text-[10px] uppercase tracking-wider text-muted-foreground px-1">Sidney</span>
-        <div className="rounded-lg p-4 text-sm max-w-2xl w-full bg-background border border-border shadow-sm text-foreground">
-          <div className="prose prose-sm prose-invert max-w-none">
-            <ReactMarkdown>{msg.content}</ReactMarkdown>
-          </div>
+        <div className="rounded-lg p-4 text-sm w-full bg-background border border-border shadow-sm">
+          <InvestigationApiReport content={msg.content} />
         </div>
         <span className="text-[10px] text-muted-foreground px-1">{formatRelative(msg.createdAt)}</span>
       </div>

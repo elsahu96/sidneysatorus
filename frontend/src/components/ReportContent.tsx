@@ -1,5 +1,6 @@
 import React, { useRef } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 import { CitationPopover } from "@/components/CitationPopover";
 import { InvestigationReferences } from "@/components/InvestigationReferences";
@@ -321,7 +322,7 @@ export function ReportContent({
   if (!enhanced) {
     return (
       <div className={cn("prose prose-sm dark:prose-invert max-w-none", className)}>
-        <ReactMarkdown>{displayContent}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{displayContent}</ReactMarkdown>
       </div>
     );
   }
@@ -342,6 +343,7 @@ export function ReportContent({
       
       <div ref={reportRef} className={cn("prose prose-invert max-w-none space-y-8", geolocations.length > 0 ? "" : "pt-12")}>
         <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
           components={{
           h1: ({ children, ...props }) => (
             <div className="border-b border-border pb-6 mb-6">
