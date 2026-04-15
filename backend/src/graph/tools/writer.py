@@ -122,6 +122,8 @@ def write_report(
                                     citations as [1], [2] matching sources list.
         risk_factors:               List of risk statements.
         sources:                    List of dicts {title, url, date (YYYY-MM-DD), key_insight}.
+                                    Preserve source URLs exactly as provided — grading is
+                                    matched by URL after writing.
         filename:                   Optional filename stem. Defaults to timestamped name.
 
     Returns:

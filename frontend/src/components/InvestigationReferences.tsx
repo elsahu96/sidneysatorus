@@ -6,6 +6,12 @@ export type ReferenceItem = {
   url: string;
   date: string;
   key_insight: string;
+  // Grading fields — present on reports generated after grading pipeline
+  grade?: string;
+  composite_score?: number;
+  factor_scores?: Record<string, number>;
+  analyst_signals?: Array<{ text: string; sentiment: "positive" | "negative" | "neutral" }>;
+  source_name?: string;
 };
 
 interface InvestigationReferencesProps {

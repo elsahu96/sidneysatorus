@@ -65,15 +65,26 @@ def _parse_report_json(data: dict) -> dict:
         content_parts.append(f"## Risk Factors\n\n{risks}")
 
     raw_sources = data.get("sources") or report_section.get("sources", [])
-    sources = [
-        {
+    sources = []
+    for s in raw_sources:
+        source: dict = {
             "title": s.get("title", ""),
             "url": s.get("url", ""),
             "date": s.get("date", ""),
             "key_insight": s.get("key_insight", ""),
         }
-        for s in raw_sources
-    ]
+        # Pass through grading fields when present
+        if "grade" in s:
+            source["grade"] = s["grade"]
+        if "composite_score" in s:
+            source["composite_score"] = s["composite_score"]
+        if "factor_scores" in s:
+            source["factor_scores"] = s["factor_scores"]
+        if "analyst_signals" in s:
+            source["analyst_signals"] = s["analyst_signals"]
+        if s.get("source_name"):
+            source["source_name"] = s["source_name"]
+        sources.append(source)
 
     return {
         "name": metadata.get("title", ""),
