@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import uuid
+from datetime import datetime
 from time import sleep
 from dotenv import load_dotenv
 
@@ -349,6 +350,7 @@ def _collect_articles_from_tool_messages(messages: list) -> list[dict]:
     return articles
 
 
+
 def run_pipeline_stages(
     task: str,
     thread_id: str,
@@ -385,9 +387,18 @@ def run_pipeline_stages(
     if quick_search:
         return run_quick_agent(task=task, on_progress=on_progress)
 
+    # Clear the AskNews grading cache so this run starts fresh.
+    from src.graph.tools.asknews import clear_grading_cache
+    clear_grading_cache()
+
     # ── Stage 1: Planning ────────────────────────────────────────────────────
     on_progress("planning-agent")
-    planning_runner = create_react_agent(model, tools=[], prompt=PLANNING_AGENT_PROMPT)
+    _today = datetime.now().strftime("%Y-%m-%d")
+    planning_runner = create_react_agent(
+        model,
+        tools=[],
+        prompt=PLANNING_AGENT_PROMPT.format(current_date=_today),
+    )
     plan_result = planning_runner.invoke({"messages": [HumanMessage(content=task)]})
     plan_text = _extract_text(plan_result["messages"][-1].content)
 
@@ -411,7 +422,7 @@ def run_pipeline_stages(
     research_runner = create_react_agent(
         model,
         tools=[parallel_search_asknews],
-        prompt=RESEARCH_AGENT_PROMPT,
+        prompt=RESEARCH_AGENT_PROMPT.format(current_date=_today),
     )
     research_prompt = (
         f"Investigation task: {task}\n\n"
@@ -459,8 +470,44 @@ def run_pipeline_stages(
             f"- {u}" for u in additional_urls
         )
 
-    # ── Stage 2.5: Confirm report format (pre-writer) ────────────────────────
+    # ── Stage 2.5: Source grading ────────────────────────────────────────────
+    on_progress("grading-sources")
+    from src.graph.grading import grade_articles
+    from src.graph.tools.asknews import get_articles_for_grading
+    from src.graph.grading.config import INVESTIGATION_PROFILE_MAP
+
+    # Use full-field cache (page_rank, key_points, etc.) built during research
+    grading_articles = get_articles_for_grading([a.get("url", "") for a in articles])
+
+    # Select grading profile based on investigation type (from plan) or default
+    grading_profile = "default"
+    plan_lower = refined_plan.lower()
+    for inv_type, profile in INVESTIGATION_PROFILE_MAP.items():
+        if inv_type.lower().replace("_", " ") in plan_lower:
+            grading_profile = profile
+            break
+
+    graded_articles = grade_articles(grading_articles, profile=grading_profile)
+
+    # Build grading summary for the writer
+    grading_summary_lines = [f"\nSource Grading (profile: {grading_profile}):"]
+    for i, ga in enumerate(graded_articles, 1):
+        grade = ga.get("grade", "?")
+        score = ga.get("composite_score", 0)
+        domain = ga.get("url", "").split("/")[2] if "://" in ga.get("url", "") else ga.get("url", "")
+        signals = ga.get("analyst_signals", [])
+        signal_text = "; ".join(s.get("text", "") for s in signals[:2]) if signals else ""
+        grading_summary_lines.append(f"  [{i}] {domain} — Grade: {grade} ({score}/100) — {signal_text}")
+    grading_context = "\n".join(grading_summary_lines)
+
+    # ── Stage 2.75: Confirm report format (pre-writer) ──────────────────────
     source_count = len(sources_for_hitl) + len(additional_urls)
+    grade_dist: dict[str, int] = {}
+    for ga in graded_articles:
+        g = ga.get("grade", "?")
+        grade_dist[g] = grade_dist.get(g, 0) + 1
+    grade_dist_str = ", ".join(f"{g}: {c}" for g, c in sorted(grade_dist.items()))
+
     decision = hitl(
         {
             "agent": "writer-agent",
@@ -468,8 +515,10 @@ def run_pipeline_stages(
             "content": (
                 f"Ready to write the intelligence report.\n\n"
                 f"• {source_count} sources collected\n"
+                f"• Source grades: {grade_dist_str}\n"
+                f"• Grading profile: {grading_profile}\n"
                 f"• Sections: Executive Summary · Detailed Analysis · Risk Factors · Sources\n"
-                f"• Format: Structured JSON with inline citations"
+                f"• Format: Structured JSON with inline citations and source grades"
             ),
             "editable": False,
         }
@@ -505,21 +554,52 @@ def run_pipeline_stages(
 
     writer_prompt = _asknews_sanitize(
         f"Investigation task: {task}\n\n"
-        f"Research findings:\n{research_summary}" + additional_context
+        f"Research findings:\n{research_summary}"
+        + additional_context
+        + "\n\n" + grading_context
     )
     writer_runner.invoke({"messages": [HumanMessage(content=writer_prompt)]})
 
     json_path = _last_write_result.get("json_path")
     if json_path:
         logger.info("Pipeline complete. Report written to: %s", json_path)
-        # Overwrite the LLM-generated title with the original user query so the
-        # report is labelled consistently throughout the UI.
+        # Post-write: patch report title, inject grades, add grading summary
         try:
             import json as _json
 
             _p = __import__("pathlib").Path(json_path)
             _data = _json.loads(_p.read_text(encoding="utf-8"))
             _data.setdefault("metadata", {})["title"] = task
+
+            # Inject grading data into each report source by URL match
+            report_sources = _data.get("report", {}).get("sources", [])
+            graded_by_url = {ga.get("url", ""): ga for ga in graded_articles}
+            for src in report_sources:
+                ga = graded_by_url.get(src.get("url", ""))
+                if ga:
+                    src["grade"] = ga.get("grade", "")
+                    src["composite_score"] = ga.get("composite_score", 0)
+                    src["factor_scores"] = ga.get("factor_scores", {})
+                    src["analyst_signals"] = ga.get("analyst_signals", [])
+                    src["source_name"] = ga.get("source_name", "")
+                else:
+                    src.setdefault("grade", "C")
+                    src.setdefault("composite_score", 0)
+                    src.setdefault("factor_scores", {})
+                    src.setdefault("analyst_signals", [])
+
+            # Add top-level source_grading summary
+            avg_score = (
+                sum(ga.get("composite_score", 0) for ga in graded_articles) // len(graded_articles)
+                if graded_articles else 0
+            )
+            _data["source_grading"] = {
+                "profile_used": grading_profile,
+                "grade_distribution": grade_dist,
+                "average_score": avg_score,
+                "total_sources_graded": len(graded_articles),
+            }
+
             _p.write_text(
                 _json.dumps(_data, ensure_ascii=False, indent=2), encoding="utf-8"
             )

@@ -26,6 +26,30 @@ _client = AskNewsSDK(api_key=ASKNEWS_API_KEY)
 
 _DEAD_STATUSES = {404, 410, 451}
 
+# ── Grading article cache ────────────────────────────────────────────────────
+# Stores the full AskNews article fields needed by the grading pipeline.
+# Keyed by sanitized URL. Written by _run_single_search; read by flow.py
+# via get_articles_for_grading().  NOT included in the Gemini tool output
+# (avoids chunk-limit errors and keeps prompt tokens down).
+_grading_article_cache: dict[str, dict] = {}
+
+
+def clear_grading_cache() -> None:
+    """Clear the grading article cache (call at start of each pipeline run)."""
+    _grading_article_cache.clear()
+
+
+def get_articles_for_grading(urls: list[str] | None = None) -> list[dict]:
+    """
+    Return cached full-field article dicts for the grading pipeline.
+
+    If urls is provided, only return articles whose URL is in that list.
+    If urls is None, return all cached articles.
+    """
+    if urls is None:
+        return list(_grading_article_cache.values())
+    return [_grading_article_cache[u] for u in urls if u in _grading_article_cache]
+
 # ── Gemini chunk-limit protection ────────────────────────────────────────────
 # The Gemini API splits HTTP request bodies on ASCII whitespace (0x20, 0x09, 0x0A,
 # 0x0D).  Any contiguous non-whitespace token longer than its internal limit causes:
@@ -123,6 +147,7 @@ class Article(TypedDict):
     countrycode: str
 
 
+
 def _to_unix(pub_date) -> int:
     if pub_date is None:
         return 0
@@ -212,6 +237,47 @@ def _run_single_search(
             language=_sanitize(str(getattr(article, "language", "") or "")),
             countrycode=_sanitize(str(getattr(article, "country", "") or "")),
         ))
+
+        # Cache full grading fields (not included in tool output to avoid
+        # Gemini chunk-limit errors).  Only cached if URL is non-empty.
+        if url and url not in _grading_article_cache:
+            # authors can be a list, a string, or None
+            raw_authors = getattr(article, "authors", None)
+            if isinstance(raw_authors, str):
+                authors_list = [raw_authors] if raw_authors else []
+            elif isinstance(raw_authors, list):
+                authors_list = [str(a) for a in raw_authors if a]
+            else:
+                authors_list = []
+
+            # key_points can be a list of strings or None
+            raw_kp = getattr(article, "key_points", None)
+            if isinstance(raw_kp, list):
+                key_points_list = [str(kp) for kp in raw_kp if kp]
+            else:
+                key_points_list = []
+
+            # keywords can be a list or None
+            raw_kw = getattr(article, "keywords", None)
+            keywords_list = [str(k) for k in raw_kw if k] if isinstance(raw_kw, list) else []
+
+            _grading_article_cache[url] = {
+                "url": url,
+                "header": header,
+                "summary": summary,
+                "countrycode": _sanitize(str(getattr(article, "country", "") or "")),
+                # AskNews grading fields
+                "page_rank": getattr(article, "page_rank", None),
+                "reporting_voice": str(getattr(article, "reporting_voice", "") or ""),
+                "bias": str(getattr(article, "bias", "") or ""),
+                "provocative": str(getattr(article, "provocative", "") or ""),
+                "authors": authors_list,
+                "key_points": key_points_list,
+                "keywords": keywords_list,
+                "classification": str(getattr(article, "classification", "") or ""),
+                "source_name": str(getattr(article, "source_id", "") or ""),
+            }
+
     live = _filter_live_urls([dict(a) for a in raw])
     live_urls = {a["url"] for a in live}
     return [a for a in raw if a["url"] in live_urls][:n_articles]

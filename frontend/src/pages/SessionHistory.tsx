@@ -4,7 +4,6 @@ import {
   MessageSquare,
   Clock,
   Archive,
-  ChevronRight,
   RefreshCw,
   Plus,
   ArrowLeft,
@@ -16,8 +15,12 @@ import { useSidebarContext } from "@/contexts/SidebarContext";
 import { cn } from "@/lib/utils";
 import { useSessionHistory } from "@/hooks/useSessionHistory";
 import { sessionApi } from "@/api/sessionApi";
+import { reportApi } from "@/api/reportApi";
 import { toast } from "sonner";
 import type { SessionRecord, SessionMessage } from "@/api/sessionApi";
+import type { ReportMetadata } from "@/types/index";
+import type { ReferenceItem } from "@/components/InvestigationReferences";
+import { InvestigationApiReport } from "@/components/ChatInterface";
 import ReactMarkdown from "react-markdown";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -39,13 +42,94 @@ function sessionDisplayTitle(s: SessionRecord): string {
   return `Session ${s.id.slice(-6).toUpperCase()}`;
 }
 
+// ── Report fetcher + renderer ─────────────────────────────────────────────────
+
+function ReportMessageBubble({ reportRef, title, createdAt }: {
+  reportRef: string;
+  title: string;
+  createdAt: string;
+}) {
+  const [report, setReport] = useState<ReportMetadata | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    reportApi.getReport(reportRef)
+      .then((data) => {
+        if (!cancelled) setReport(data);
+      })
+      .catch((err) => {
+        if (!cancelled)
+          setError(err instanceof Error ? err.message : "Failed to load report");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [reportRef]);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-start gap-1">
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground px-1">Sidney</span>
+        <div className="rounded-lg border border-border bg-background px-4 py-3 text-sm max-w-2xl w-full shadow-sm flex items-center gap-2 text-muted-foreground">
+          <RefreshCw className="h-3.5 w-3.5 animate-spin shrink-0" />
+          <span>Loading report…</span>
+        </div>
+        <span className="text-[10px] text-muted-foreground px-1">{formatRelative(createdAt)}</span>
+      </div>
+    );
+  }
+
+  if (error || !report?.content) {
+    // Graceful fallback: show the report title card
+    return (
+      <div className="flex flex-col items-start gap-1">
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground px-1">Sidney</span>
+        <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm max-w-2xl w-full shadow-sm">
+          <div className="flex items-center gap-2 mb-1">
+            <FileText className="h-4 w-4 text-primary shrink-0" />
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-primary">
+              Investigation Report
+            </span>
+          </div>
+          <p className="font-medium text-foreground leading-snug">{title}</p>
+          {error && (
+            <p className="mt-1.5 text-[11px] text-destructive/80">{error}</p>
+          )}
+        </div>
+        <span className="text-[10px] text-muted-foreground px-1">{formatRelative(createdAt)}</span>
+      </div>
+    );
+  }
+
+  const references: ReferenceItem[] = (report.sources ?? []) as ReferenceItem[];
+
+  return (
+    <div className="flex flex-col items-start gap-1 w-full">
+      <span className="text-[10px] uppercase tracking-wider text-muted-foreground px-1">Sidney</span>
+      <div className="w-full">
+        <InvestigationApiReport
+          content={report.content}
+          geolocations={report.geolocations}
+          references={references}
+        />
+      </div>
+      <span className="text-[10px] text-muted-foreground px-1">{formatRelative(createdAt)}</span>
+    </div>
+  );
+}
+
 // ── Message bubble (chat-window style) ───────────────────────────────────────
 
 function ChatMessageBubble({ msg }: { msg: SessionMessage }) {
   const isUser = msg.role === "USER";
   const isReport = msg.messageType === "REPORT";
-  // Long content = full markdown body (quick search); short = just a title (deep investigate)
-  const isFullMarkdown = isReport && msg.content.length > 200;
 
   if (isUser) {
     return (
@@ -59,7 +143,19 @@ function ChatMessageBubble({ msg }: { msg: SessionMessage }) {
     );
   }
 
-  if (isReport && isFullMarkdown) {
+  // REPORT with a stored ref → fetch the full JSON and render it properly
+  if (isReport && msg.reportRef) {
+    return (
+      <ReportMessageBubble
+        reportRef={msg.reportRef}
+        title={msg.content}
+        createdAt={msg.createdAt}
+      />
+    );
+  }
+
+  // REPORT with inline markdown content (quick search path — no reportRef)
+  if (isReport) {
     return (
       <div className="flex flex-col items-start gap-1">
         <span className="text-[10px] uppercase tracking-wider text-muted-foreground px-1">Sidney</span>
@@ -67,29 +163,6 @@ function ChatMessageBubble({ msg }: { msg: SessionMessage }) {
           <div className="prose prose-sm prose-invert max-w-none">
             <ReactMarkdown>{msg.content}</ReactMarkdown>
           </div>
-        </div>
-        <span className="text-[10px] text-muted-foreground px-1">{formatRelative(msg.createdAt)}</span>
-      </div>
-    );
-  }
-
-  if (isReport) {
-    return (
-      <div className="flex flex-col items-start gap-1">
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground px-1">Sidney</span>
-        <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm max-w-2xl w-full shadow-sm">
-          <div className="flex items-center gap-2 mb-1">
-            <FileText className="h-4 w-4 text-primary shrink-0" />
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-primary">
-              Investigation Report
-            </span>
-          </div>
-          <p className="font-medium text-foreground leading-snug">{msg.content}</p>
-          {msg.reportRef && (
-            <p className="mt-1.5 text-[11px] text-muted-foreground font-mono truncate opacity-60">
-              ref: {msg.reportRef}
-            </p>
-          )}
         </div>
         <span className="text-[10px] text-muted-foreground px-1">{formatRelative(msg.createdAt)}</span>
       </div>
@@ -143,7 +216,7 @@ function SessionListItem({
           <Clock className="h-3 w-3 text-muted-foreground" />
           <span className="text-[11px] text-muted-foreground">{formatRelative(session.updatedAt)}</span>
           {session.blobPointer && (
-            <Archive className="h-3 w-3 text-muted-foreground opacity-60 ml-1" title="Archived" />
+            <span title="Archived"><Archive className="h-3 w-3 text-muted-foreground opacity-60 ml-1" /></span>
           )}
           {session.summary && (
             <span className="text-[11px] text-muted-foreground truncate ml-1 opacity-75">
