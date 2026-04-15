@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import uuid
+from datetime import datetime
 from time import sleep
 from dotenv import load_dotenv
 
@@ -392,7 +393,12 @@ def run_pipeline_stages(
 
     # ── Stage 1: Planning ────────────────────────────────────────────────────
     on_progress("planning-agent")
-    planning_runner = create_react_agent(model, tools=[], prompt=PLANNING_AGENT_PROMPT)
+    _today = datetime.now().strftime("%Y-%m-%d")
+    planning_runner = create_react_agent(
+        model,
+        tools=[],
+        prompt=PLANNING_AGENT_PROMPT.format(current_date=_today),
+    )
     plan_result = planning_runner.invoke({"messages": [HumanMessage(content=task)]})
     plan_text = _extract_text(plan_result["messages"][-1].content)
 
@@ -416,7 +422,7 @@ def run_pipeline_stages(
     research_runner = create_react_agent(
         model,
         tools=[parallel_search_asknews],
-        prompt=RESEARCH_AGENT_PROMPT,
+        prompt=RESEARCH_AGENT_PROMPT.format(current_date=_today),
     )
     research_prompt = (
         f"Investigation task: {task}\n\n"
