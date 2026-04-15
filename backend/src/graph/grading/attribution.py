@@ -53,7 +53,9 @@ def classify_attribution(key_points: list[str], has_author: bool) -> int:
 
     formatted_points = "\n".join(f"- {kp}" for kp in key_points)
     try:
-        response = _llm.invoke(_CLASSIFICATION_PROMPT.format(key_points=formatted_points))
+        response = _llm.invoke(
+            _CLASSIFICATION_PROMPT.format(key_points=formatted_points)
+        )
         content = response.content.strip()
         # Parse JSON from response
         if content.startswith("```"):
@@ -62,7 +64,9 @@ def classify_attribution(key_points: list[str], has_author: bool) -> int:
                 content = content[4:]
         result = json.loads(content)
         attr_type = result.get("attribution_type", "no_attribution")
-        base_score = ATTRIBUTION_SCORES.get(attr_type, ATTRIBUTION_SCORES["no_attribution"])
+        base_score = ATTRIBUTION_SCORES.get(
+            attr_type, ATTRIBUTION_SCORES["no_attribution"]
+        )
     except Exception as e:
         logger.warning("Attribution classification failed: %s — defaulting to 50", e)
         base_score = 50

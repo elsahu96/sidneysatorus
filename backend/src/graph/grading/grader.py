@@ -52,7 +52,9 @@ class SourceGrader:
 
     def __init__(self, profile: str = "default"):
         if profile not in WEIGHT_PROFILES:
-            logger.warning("Unknown grading profile '%s', falling back to 'default'", profile)
+            logger.warning(
+                "Unknown grading profile '%s', falling back to 'default'", profile
+            )
             profile = "default"
         self.profile = profile
         self.weights = WEIGHT_PROFILES[profile]
@@ -158,7 +160,9 @@ class SourceGrader:
         if sponsor_country:
             country = article.get("countrycode", "").upper()
             keywords = [k.lower() for k in article.get("keywords", [])]
-            if country == sponsor_country or sponsor_country.lower() in " ".join(keywords):
+            if country == sponsor_country or sponsor_country.lower() in " ".join(
+                keywords
+            ):
                 composite += PENALTY_COI
                 applied.append(f"conflict_of_interest ({PENALTY_COI})")
 
@@ -167,13 +171,19 @@ class SourceGrader:
         if sponsor_country and mbfc:
             media_type = mbfc.get("media_type", "").lower()
             if "state" in media_type or domain in {
-                "rt.com", "cgtn.com", "presstv.ir", "tass.com",
-                "xinhua.net", "sputniknews.com",
+                "rt.com",
+                "cgtn.com",
+                "presstv.ir",
+                "tass.com",
+                "xinhua.net",
+                "sputniknews.com",
             }:
                 country = article.get("countrycode", "").upper()
                 if country == sponsor_country:
                     composite += PENALTY_STATE_MEDIA
-                    applied.append(f"state_media_on_sponsor_topic ({PENALTY_STATE_MEDIA})")
+                    applied.append(
+                        f"state_media_on_sponsor_topic ({PENALTY_STATE_MEDIA})"
+                    )
 
         # Primary source bonus: +10
         if any(pattern in domain for pattern in PRIMARY_SOURCE_PATTERNS):
@@ -186,7 +196,9 @@ class SourceGrader:
             corr_level = corroboration_data.get("level", "")
             if corr_level == "standalone":
                 composite += BONUS_INVESTIGATIVE_EXCLUSIVE
-                applied.append(f"investigative_exclusive (+{BONUS_INVESTIGATIVE_EXCLUSIVE})")
+                applied.append(
+                    f"investigative_exclusive (+{BONUS_INVESTIGATIVE_EXCLUSIVE})"
+                )
 
         # Anonymous / no author: -5
         authors = article.get("authors", [])
@@ -237,8 +249,7 @@ class SourceGrader:
         }
 
         composite = sum(
-            factor_scores[factor] * self.weights[factor]
-            for factor in factor_scores
+            factor_scores[factor] * self.weights[factor] for factor in factor_scores
         )
 
         composite, penalties_applied = self._apply_penalties_bonuses(

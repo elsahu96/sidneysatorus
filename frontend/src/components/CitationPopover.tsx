@@ -2,10 +2,26 @@ import { useState, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { ExternalLink } from "lucide-react";
 import type { ReferenceItem } from "@/components/InvestigationReferences";
+import { SourceGradeBadge } from "@/components/SourceGradeBadge";
 
 const POPOVER_WIDTH = 360;
 const POPOVER_HEIGHT = 340; // conservative estimate for flip logic
 const GAP = 10;
+
+const FACTOR_LABELS: Record<string, string> = {
+  factual_reliability: "Factual",
+  source_authority: "Authority",
+  bias_objectivity: "Objectivity",
+  attribution_quality: "Attribution",
+  press_environment: "Press freedom",
+  corroboration: "Corroboration",
+};
+
+function factorBarColor(score: number): string {
+  if (score >= 75) return "#34d399";
+  if (score >= 50) return "#fbbf24";
+  return "#f87171";
+}
 
 interface PopoverPos {
   top: number;

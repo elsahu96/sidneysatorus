@@ -194,4 +194,4 @@ def load_media_type_fallback() -> dict[str, str]:
 def lookup_media_type_fallback(url: str) -> str | None:
     """Get fallback media type for a domain. Returns None if not in fallback list."""
     domain = normalize_domain(url)
-    return load_media_type_fallback().get(domain)
+    return load_media_type_fallback().get(domain) 

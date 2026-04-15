@@ -69,7 +69,9 @@ def generate_signals(
 
     factor_scores = grading_result.get("factor_scores", {})
     penalties = grading_result.get("penalties_applied", [])
-    corr_reasoning = (corroboration_data or {}).get("reasoning", "No corroboration data")
+    corr_reasoning = (corroboration_data or {}).get(
+        "reasoning", "No corroboration data"
+    )
 
     domain = normalize_domain(article.get("url", ""))
     prompt = _SIGNAL_PROMPT.format(
@@ -107,14 +109,26 @@ def generate_signals(
                 validated.append({"text": s["text"], "sentiment": sentiment})
         # Enforce 3-6 signals
         if len(validated) < 3:
-            validated.extend([{"text": "Assessment details limited.", "sentiment": "neutral"}] * (3 - len(validated)))
+            validated.extend(
+                [{"text": "Assessment details limited.", "sentiment": "neutral"}]
+                * (3 - len(validated))
+            )
         return validated[:6]
     except Exception as e:
         logger.warning("Signal generation failed for %s: %s", domain, e)
         return [
-            {"text": f"Source graded {grading_result.get('grade', '?')} ({grading_result.get('composite_score', 0)}/100).", "sentiment": "neutral"},
-            {"text": "Automated signal generation unavailable for this source.", "sentiment": "neutral"},
-            {"text": "Review factor scores for detailed assessment.", "sentiment": "neutral"},
+            {
+                "text": f"Source graded {grading_result.get('grade', '?')} ({grading_result.get('composite_score', 0)}/100).",
+                "sentiment": "neutral",
+            },
+            {
+                "text": "Automated signal generation unavailable for this source.",
+                "sentiment": "neutral",
+            },
+            {
+                "text": "Review factor scores for detailed assessment.",
+                "sentiment": "neutral",
+            },
         ]
 
 
@@ -159,7 +173,10 @@ def generate_signals_batch(
                 results[url] = [
                     {"text": "Signal generation failed.", "sentiment": "neutral"},
                     {"text": "Review factor scores manually.", "sentiment": "neutral"},
-                    {"text": "Contact support if issue persists.", "sentiment": "neutral"},
+                    {
+                        "text": "Contact support if issue persists.",
+                        "sentiment": "neutral",
+                    },
                 ]
 
     return results

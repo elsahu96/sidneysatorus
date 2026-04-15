@@ -73,7 +73,6 @@ def _parse_report_json(data: dict) -> dict:
             "date": s.get("date", ""),
             "key_insight": s.get("key_insight", ""),
         }
-        # Pass through grading fields when present
         if "grade" in s:
             source["grade"] = s["grade"]
         if "composite_score" in s:

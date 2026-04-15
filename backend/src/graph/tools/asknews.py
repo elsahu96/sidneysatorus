@@ -147,6 +147,7 @@ class Article(TypedDict):
     countrycode: str
 
 
+
 def _to_unix(pub_date) -> int:
     if pub_date is None:
         return 0

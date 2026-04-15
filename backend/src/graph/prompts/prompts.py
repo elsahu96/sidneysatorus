@@ -167,6 +167,14 @@ List every article you cite, in the order first referenced, with:
 - Every URL in the sources list was validated as live by the research pipeline —
   do not modify or truncate URLs. Use them exactly as provided.
 
+## SOURCE GRADING
+The research findings include a "Source Grading" section with reliability grades
+(A+ to D) for each source. Use this information to:
+- Prioritise high-grade sources (A+, A) for key claims and findings.
+- Flag low-grade sources (C, D) with appropriate caveats in the analysis.
+- Mention source reliability in the methodology section.
+- When two sources conflict, prefer the higher-graded one and note the discrepancy.
+
 ### Step 4 — Call `write_report` exactly once
 Pass all sections and metadata to the tool. It will produce a single JSON file
 containing both the formatted report content and all metadata for frontend rendering.

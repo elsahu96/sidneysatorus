@@ -1,5 +1,6 @@
 import { Newspaper, ExternalLink } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { SourceGradeBadge } from "@/components/SourceGradeBadge";
 
 export type ReferenceItem = {
   title: string;
@@ -43,12 +44,15 @@ export const InvestigationReferences = ({ items }: InvestigationReferencesProps)
                 </span>
                 <span className="flex-1 flex items-start gap-2">
                   <ExternalLink className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>
+                  <span className="flex-1">
                     <span className="font-medium">{item.title}</span>
                     {item.date && (
                       <span className="text-muted-foreground text-sm ml-2">{item.date}</span>
                     )}
                   </span>
+                  {item.grade && (
+                    <SourceGradeBadge grade={item.grade} size="sm" className="mt-0.5" />
+                  )}
                 </span>
               </a>
               {item.key_insight && (

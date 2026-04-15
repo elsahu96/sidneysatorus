@@ -149,11 +149,11 @@ PROVOCATIVE_DEFAULT = 60
 
 PAGE_RANK_TIERS: list[tuple[float, int]] = [
     # (min_page_rank, score) — thresholds checked from highest to lowest
-    (80, 100),   # Tier 1: global leaders
-    (60, 80),    # Tier 2: major national outlets
-    (40, 60),    # Tier 3: established regional
-    (20, 40),    # Tier 4: smaller outlets
-    (0, 20),     # Tier 5: minimal reach
+    (80, 100),  # Tier 1: global leaders
+    (60, 80),  # Tier 2: major national outlets
+    (40, 60),  # Tier 3: established regional
+    (20, 40),  # Tier 4: smaller outlets
+    (0, 20),  # Tier 5: minimal reach
 ]
 
 PAGE_RANK_DEFAULT = 40
@@ -191,33 +191,55 @@ AUTHOR_BONUS = 10
 # ── Corroboration levels ────────────────────────────────────────────────────
 
 CORROBORATION_SCORES: dict[str, int] = {
-    "strong": 100,       # 3+ independent sources
-    "moderate": 75,      # 2 independent sources
-    "partial": 50,       # partial overlap
-    "standalone": 30,    # no corroboration
+    "strong": 100,  # 3+ independent sources
+    "moderate": 75,  # 2 independent sources
+    "partial": 50,  # partial overlap
+    "standalone": 30,  # no corroboration
     "contradicted": 10,  # actively contradicted
 }
 
 # ── Penalties and bonuses ───────────────────────────────────────────────────
 
-PENALTY_COI = -15               # Source in COI list AND topic involves sponsor country
-PENALTY_STATE_MEDIA = -20       # State-funded AND reporting on own government
-BONUS_PRIMARY_SOURCE = 10       # .gov, court filing, or regulatory body
+PENALTY_COI = -15  # Source in COI list AND topic involves sponsor country
+PENALTY_STATE_MEDIA = -20  # State-funded AND reporting on own government
+BONUS_PRIMARY_SOURCE = 10  # .gov, court filing, or regulatory body
 BONUS_INVESTIGATIVE_EXCLUSIVE = 5  # Sole reporter + Investigative voice
-PENALTY_ANONYMOUS = -5          # No author AND not a wire service
+PENALTY_ANONYMOUS = -5  # No author AND not a wire service
 
-WIRE_SERVICES = frozenset({
-    "reuters.com", "apnews.com", "afp.com", "upi.com",
-    "xinhua.net", "tass.com", "efe.com", "ansa.it",
-    "kyodonews.net", "pap.pl", "bta.bg",
-})
+WIRE_SERVICES = frozenset(
+    {
+        "reuters.com",
+        "apnews.com",
+        "afp.com",
+        "upi.com",
+        "xinhua.net",
+        "tass.com",
+        "efe.com",
+        "ansa.it",
+        "kyodonews.net",
+        "pap.pl",
+        "bta.bg",
+    }
+)
 
-PRIMARY_SOURCE_PATTERNS = frozenset({
-    ".gov", ".gov.", ".mil", ".judiciary.", "courts.",
-    "sec.gov", "ofac.treasury.gov", "fca.org.uk",
-    "europa.eu", "un.org", "who.int", "imf.org",
-    "worldbank.org", "icj-cij.org",
-})
+PRIMARY_SOURCE_PATTERNS = frozenset(
+    {
+        ".gov",
+        ".gov.",
+        ".mil",
+        ".judiciary.",
+        "courts.",
+        "sec.gov",
+        "ofac.treasury.gov",
+        "fca.org.uk",
+        "europa.eu",
+        "un.org",
+        "who.int",
+        "imf.org",
+        "worldbank.org",
+        "icj-cij.org",
+    }
+)
 
 # ── Grade thresholds ────────────────────────────────────────────────────────
 # Checked from highest to lowest; first match wins.
@@ -237,4 +259,6 @@ SPECIALIST_VERTICAL_BOOST = 15
 
 # ── LLM model for grading calls ─────────────────────────────────────────────
 
-GRADING_LLM_MODEL = os.environ.get("GEMINI_MODEL_NAME", "google_genai:gemini-3-flash-preview")
+GRADING_LLM_MODEL = os.environ.get(
+    "GEMINI_MODEL_NAME", "google_genai:gemini-3-flash-preview"
+)

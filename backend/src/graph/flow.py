@@ -349,97 +349,6 @@ def _collect_articles_from_tool_messages(messages: list) -> list[dict]:
     return articles
 
 
-def _grade_and_patch_report(json_path: str, articles: list[dict]) -> None:
-    """
-    Run the grading pipeline on collected AskNews articles and inject grade data
-    into the saved report JSON for every source whose URL matches a graded article.
-
-    Grade fields added to each source dict:
-        grade             – letter grade (A+, A, B+, B, C, D)
-        composite_score   – 0-100 numeric score
-        factor_scores     – dict of the six individual factor scores
-        analyst_signals   – list of {text, sentiment} analyst bullets
-
-    Unmatched sources receive a minimal grade stub (grade="C", composite_score=0).
-    This function never raises; all errors are logged.
-    """
-    import json as _json
-    import pathlib as _pathlib
-
-    try:
-        from src.graph.grading import grade_articles
-        from src.graph.grading.config import INVESTIGATION_PROFILE_MAP
-        from src.graph.grading.data_loaders import normalize_domain
-    except ImportError as exc:
-        logger.warning("Grading module not available — skipping source grading: %s", exc)
-        return
-
-    if not articles:
-        logger.info("No articles to grade.")
-        return
-
-    try:
-        report_path = _pathlib.Path(json_path)
-        report_data = _json.loads(report_path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        logger.warning("Could not read report JSON for grading patch: %s", exc)
-        return
-
-    # Pick grading profile based on investigation_type written by the LLM
-    investigation_type = report_data.get("metadata", {}).get("investigation_type", "")
-    profile = INVESTIGATION_PROFILE_MAP.get(investigation_type, "default")
-    logger.info("Grading %d articles with profile '%s' (investigation_type=%s)",
-                len(articles), profile, investigation_type)
-
-    try:
-        graded = grade_articles(articles, profile=profile)
-    except Exception as exc:
-        logger.warning("grade_articles failed — report sources will not have grades: %s", exc)
-        return
-
-    # Build lookup maps: exact URL → grade data, domain → grade data (fallback)
-    url_to_grade: dict[str, dict] = {}
-    domain_to_grade: dict[str, dict] = {}
-    for art in graded:
-        grade_data = {
-            "grade": art.get("grade", "C"),
-            "composite_score": art.get("composite_score", 0),
-            "factor_scores": art.get("factor_scores", {}),
-            "analyst_signals": art.get("analyst_signals", []),
-            "source_name": art.get("source_name", ""),
-        }
-        art_url = art.get("url", "")
-        if art_url:
-            url_to_grade[art_url] = grade_data
-        art_domain = normalize_domain(art_url)
-        if art_domain and art_domain not in domain_to_grade:
-            domain_to_grade[art_domain] = grade_data
-
-    # Patch report sources
-    sources = report_data.get("report", {}).get("sources", [])
-    patched = 0
-    for source in sources:
-        src_url = source.get("url", "")
-        grade_data = url_to_grade.get(src_url)
-        if grade_data is None:
-            src_domain = normalize_domain(src_url)
-            grade_data = domain_to_grade.get(src_domain)
-        if grade_data:
-            source.update(grade_data)
-            patched += 1
-        else:
-            # Unmatched source: stub so frontend always has a grade field
-            source.setdefault("grade", "C")
-            source.setdefault("composite_score", 0)
-            source.setdefault("factor_scores", {})
-            source.setdefault("analyst_signals", [])
-
-    try:
-        report_path.write_text(_json.dumps(report_data, ensure_ascii=False, indent=2), encoding="utf-8")
-        logger.info("Grading patch complete: %d/%d sources matched and graded.", patched, len(sources))
-    except Exception as exc:
-        logger.warning("Could not write graded report JSON: %s", exc)
-
 
 def run_pipeline_stages(
     task: str,
@@ -555,8 +464,44 @@ def run_pipeline_stages(
             f"- {u}" for u in additional_urls
         )
 
-    # ── Stage 2.5: Confirm report format (pre-writer) ────────────────────────
+    # ── Stage 2.5: Source grading ────────────────────────────────────────────
+    on_progress("grading-sources")
+    from src.graph.grading import grade_articles
+    from src.graph.tools.asknews import get_articles_for_grading
+    from src.graph.grading.config import INVESTIGATION_PROFILE_MAP
+
+    # Use full-field cache (page_rank, key_points, etc.) built during research
+    grading_articles = get_articles_for_grading([a.get("url", "") for a in articles])
+
+    # Select grading profile based on investigation type (from plan) or default
+    grading_profile = "default"
+    plan_lower = refined_plan.lower()
+    for inv_type, profile in INVESTIGATION_PROFILE_MAP.items():
+        if inv_type.lower().replace("_", " ") in plan_lower:
+            grading_profile = profile
+            break
+
+    graded_articles = grade_articles(grading_articles, profile=grading_profile)
+
+    # Build grading summary for the writer
+    grading_summary_lines = [f"\nSource Grading (profile: {grading_profile}):"]
+    for i, ga in enumerate(graded_articles, 1):
+        grade = ga.get("grade", "?")
+        score = ga.get("composite_score", 0)
+        domain = ga.get("url", "").split("/")[2] if "://" in ga.get("url", "") else ga.get("url", "")
+        signals = ga.get("analyst_signals", [])
+        signal_text = "; ".join(s.get("text", "") for s in signals[:2]) if signals else ""
+        grading_summary_lines.append(f"  [{i}] {domain} — Grade: {grade} ({score}/100) — {signal_text}")
+    grading_context = "\n".join(grading_summary_lines)
+
+    # ── Stage 2.75: Confirm report format (pre-writer) ──────────────────────
     source_count = len(sources_for_hitl) + len(additional_urls)
+    grade_dist: dict[str, int] = {}
+    for ga in graded_articles:
+        g = ga.get("grade", "?")
+        grade_dist[g] = grade_dist.get(g, 0) + 1
+    grade_dist_str = ", ".join(f"{g}: {c}" for g, c in sorted(grade_dist.items()))
+
     decision = hitl(
         {
             "agent": "writer-agent",
@@ -564,8 +509,10 @@ def run_pipeline_stages(
             "content": (
                 f"Ready to write the intelligence report.\n\n"
                 f"• {source_count} sources collected\n"
+                f"• Source grades: {grade_dist_str}\n"
+                f"• Grading profile: {grading_profile}\n"
                 f"• Sections: Executive Summary · Detailed Analysis · Risk Factors · Sources\n"
-                f"• Format: Structured JSON with inline citations"
+                f"• Format: Structured JSON with inline citations and source grades"
             ),
             "editable": False,
         }
@@ -601,34 +548,57 @@ def run_pipeline_stages(
 
     writer_prompt = _asknews_sanitize(
         f"Investigation task: {task}\n\n"
-        f"Research findings:\n{research_summary}" + additional_context
+        f"Research findings:\n{research_summary}"
+        + additional_context
+        + "\n\n" + grading_context
     )
     writer_runner.invoke({"messages": [HumanMessage(content=writer_prompt)]})
 
     json_path = _last_write_result.get("json_path")
     if json_path:
         logger.info("Pipeline complete. Report written to: %s", json_path)
-        # Overwrite the LLM-generated title with the original user query so the
-        # report is labelled consistently throughout the UI.
+        # Post-write: patch report title, inject grades, add grading summary
         try:
             import json as _json
 
             _p = __import__("pathlib").Path(json_path)
             _data = _json.loads(_p.read_text(encoding="utf-8"))
             _data.setdefault("metadata", {})["title"] = task
+
+            # Inject grading data into each report source by URL match
+            report_sources = _data.get("report", {}).get("sources", [])
+            graded_by_url = {ga.get("url", ""): ga for ga in graded_articles}
+            for src in report_sources:
+                ga = graded_by_url.get(src.get("url", ""))
+                if ga:
+                    src["grade"] = ga.get("grade", "")
+                    src["composite_score"] = ga.get("composite_score", 0)
+                    src["factor_scores"] = ga.get("factor_scores", {})
+                    src["analyst_signals"] = ga.get("analyst_signals", [])
+                    src["source_name"] = ga.get("source_name", "")
+                else:
+                    src.setdefault("grade", "C")
+                    src.setdefault("composite_score", 0)
+                    src.setdefault("factor_scores", {})
+                    src.setdefault("analyst_signals", [])
+
+            # Add top-level source_grading summary
+            avg_score = (
+                sum(ga.get("composite_score", 0) for ga in graded_articles) // len(graded_articles)
+                if graded_articles else 0
+            )
+            _data["source_grading"] = {
+                "profile_used": grading_profile,
+                "grade_distribution": grade_dist,
+                "average_score": avg_score,
+                "total_sources_graded": len(graded_articles),
+            }
+
             _p.write_text(
                 _json.dumps(_data, ensure_ascii=False, indent=2), encoding="utf-8"
             )
         except Exception as _e:
             logger.warning("Could not patch report title: %s", _e)
-
-        # Grade all AskNews articles and inject grade data into each source.
-        # Use the full-field cache (page_rank, key_points, etc.) rather than
-        # the basic article dicts that were passed to Gemini.
-        on_progress("grading-sources")
-        from src.graph.tools.asknews import get_articles_for_grading
-        grading_articles = get_articles_for_grading([a.get("url", "") for a in articles])
-        _grade_and_patch_report(json_path, grading_articles)
     else:
         logger.warning("Writer agent did not produce a json_path.")
     return json_path
