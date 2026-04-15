@@ -337,6 +337,7 @@ export const ChatInterface = () => {
   const { addCaseFile } = useCaseFiles();
 
   const performInvestigationApi = useCallback(async (query: string) => {
+    investigateAbortRef.current = new AbortController();
     const threadId = crypto.randomUUID();
     activeThreadId.current = threadId;
     const reportMeta = await apiClient.investigate.start(query, { signal: investigateAbortRef.current?.signal });
@@ -770,13 +771,21 @@ export const ChatInterface = () => {
     toast.success("Chat cleared");
   }, [reset]);
 
-  const handleStop = useCallback(() => {
+  const handleStop = useCallback(async () => {
     investigateAbortRef.current?.abort();
     quickAbortRef.current?.abort();
+    if (activeTaskId) {
+      try {
+        await apiClient.investigate.terminate(activeTaskId);
+      } catch {
+        // ignore — process may have already exited
+      }
+      setActiveTaskId(null);
+    }
     reset();
     setLoadingStages([]);
     toast.info("Investigation stopped");
-  }, [reset]);
+  }, [reset, activeTaskId]);
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
