@@ -265,6 +265,8 @@ def _run_single_search(
                 "url": url,
                 "header": header,
                 "summary": summary,
+                "unix_timestamp": _to_unix(getattr(article, "pub_date", None)),
+                "language": _sanitize(str(getattr(article, "language", "") or "")),
                 "countrycode": _sanitize(str(getattr(article, "country", "") or "")),
                 # AskNews grading fields
                 "page_rank": getattr(article, "page_rank", None),

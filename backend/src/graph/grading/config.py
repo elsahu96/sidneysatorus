@@ -32,6 +32,17 @@ WEIGHT_PROFILES: dict[str, dict[str, float]] = {
         "press_environment": 0.15,
         "corroboration": 0.20,
     },
+    # Phase 1 PDF-aligned crisis profile (used by the layer model output).
+    # Note: the six-factor composite still uses the weights below; the PDF layer
+    # model applies separate per-layer weights + timeliness decay.
+    "geopolitical_crisis": {
+        "factual_reliability": 0.15,
+        "source_authority": 0.15,
+        "bias_objectivity": 0.25,
+        "attribution_quality": 0.10,
+        "press_environment": 0.15,
+        "corroboration": 0.20,
+    },
     "due_diligence": {
         "factual_reliability": 0.25,
         "source_authority": 0.10,
@@ -71,8 +82,30 @@ WEIGHT_PROFILES: dict[str, dict[str, float]] = {
 INVESTIGATION_PROFILE_MAP: dict[str, str] = {
     "PERSON_INVESTIGATION": "due_diligence",
     "COMPANY_INVESTIGATION": "due_diligence",
-    "GEOPOLITICAL_ANALYSIS": "geopolitical",
+    "GEOPOLITICAL_ANALYSIS": "geopolitical_crisis",
     "NETWORK_MAPPING": "default",
+}
+
+# ── PDF layer-model weights & timeliness decay ───────────────────────────────
+
+# Geopolitical crisis archetype weights (PDF: swing methodology draft).
+# Values sum to 100; timeliness decay is applied separately (half-life).
+PDF_LAYER_WEIGHTS: dict[str, dict[str, int]] = {
+    "geopolitical_crisis": {
+        "L9": 18,   # Bias & framing
+        "L8": 17,   # Corroboration
+        "L6": 13,   # Attribution quality
+        "L5": 12,   # Content-level factual assessment (placeholder in Phase 1)
+        "L3": 10,   # Press environment
+        "L1": 8,    # Source identity/type (proxy in Phase 1)
+        "L11": 8,   # Geo/temporal proximity (placeholder in Phase 1)
+        "L10": 7,   # Specialist provenance (placeholder in Phase 1)
+        "L2": 7,    # External credibility ratings
+    }
+}
+
+PDF_TIMELINESS_HALF_LIFE_HOURS: dict[str, int] = {
+    "geopolitical_crisis": 72,
 }
 
 # ── MBFC factual reporting → score ──────────────────────────────────────────

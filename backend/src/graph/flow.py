@@ -574,19 +574,58 @@ def run_pipeline_stages(
             # Inject grading data into each report source by URL match
             report_sources = _data.get("report", {}).get("sources", [])
             graded_by_url = {ga.get("url", ""): ga for ga in graded_articles}
+            # Fallback: the writer sometimes outputs a homepage URL (domain-only).
+            # When exact URL match fails, match by normalised domain.
+            try:
+                from src.graph.grading.data_loaders import normalize_domain
+            except Exception:
+                normalize_domain = None  # type: ignore[assignment]
+
+            graded_by_domain: dict[str, dict] = {}
+            if normalize_domain:
+                # Choose the "best" graded entry per domain (highest overall_score, else composite_score)
+                for ga in graded_articles:
+                    d = normalize_domain(ga.get("url", ""))
+                    if not d:
+                        continue
+                    prev = graded_by_domain.get(d)
+                    if prev is None:
+                        graded_by_domain[d] = ga
+                        continue
+                    prev_key = (prev.get("overall_score", 0.0), prev.get("composite_score", 0))
+                    ga_key = (ga.get("overall_score", 0.0), ga.get("composite_score", 0))
+                    if ga_key > prev_key:
+                        graded_by_domain[d] = ga
+
             for src in report_sources:
-                ga = graded_by_url.get(src.get("url", ""))
+                src_url = src.get("url", "")
+                ga = graded_by_url.get(src_url)
+                if ga is None and normalize_domain:
+                    ga = graded_by_domain.get(normalize_domain(src_url))
                 if ga:
                     src["grade"] = ga.get("grade", "")
                     src["composite_score"] = ga.get("composite_score", 0)
                     src["factor_scores"] = ga.get("factor_scores", {})
                     src["analyst_signals"] = ga.get("analyst_signals", [])
                     src["source_name"] = ga.get("source_name", "")
+                    # Phase 1 PDF-aligned layer model fields
+                    src["overall_score"] = ga.get("overall_score", 0.0)
+                    src["letter_grade"] = ga.get("letter_grade", ga.get("grade", ""))
+                    src["layer_scores"] = ga.get("layer_scores", {})
+                    src["flags"] = ga.get("flags", [])
+                    src["perspective_tags"] = ga.get("perspective_tags", {})
+                    src["grading_explanation"] = ga.get("explanation", {})
                 else:
                     src.setdefault("grade", "C")
                     src.setdefault("composite_score", 0)
                     src.setdefault("factor_scores", {})
                     src.setdefault("analyst_signals", [])
+                    src.setdefault("overall_score", 0.0)
+                    src.setdefault("letter_grade", src.get("grade", "C"))
+                    src.setdefault("layer_scores", {})
+                    src.setdefault("flags", [])
+                    src.setdefault("perspective_tags", {})
+                    src.setdefault("grading_explanation", {})
 
             # Add top-level source_grading summary
             avg_score = (
@@ -598,6 +637,7 @@ def run_pipeline_stages(
                 "grade_distribution": grade_dist,
                 "average_score": avg_score,
                 "total_sources_graded": len(graded_articles),
+                "phase": "phase_1_layered_mvp",
             }
 
             _p.write_text(
