@@ -393,6 +393,13 @@ export const ChatInterface = () => {
             }
           }
 
+          if (data.type === "stopped") {
+            stopStageCycling();
+            setHitlState(null);
+            connection.close();
+            reject(new Error("Investigation stopped by user"));
+          }
+
           if (data.type === "error" || data.status === "error") {
             stopStageCycling();
             setHitlState(null);
@@ -583,13 +590,18 @@ export const ChatInterface = () => {
         }
         return [{ id: reportMsgId, role: "assistant" as const, content: result.name || "Investigation Report" }];
       } catch (err: unknown) {
-        if (axios.isCancel(err)) {  
+        const isUserStop =
+          axios.isCancel(err) ||
+          (err instanceof Error &&
+            (err.message === "Investigation cancelled" ||
+              err.message === "Investigation stopped by user"));
+        if (isUserStop) {
           const id = createMessageId();
           return [
             {
               id,
               role: "assistant" as const,
-              content: "Investigation cancelled.",
+              content: "Investigation was stopped.",
             },
           ];
         }
@@ -639,6 +651,9 @@ export const ChatInterface = () => {
 
   const handleHitlReject = useCallback(async () => {
     if (!hitlState) return;
+    // Abort the SSE connection first so the backend "stopped by user" error
+    // event doesn't reach the promise rejection handler.
+    investigateAbortRef.current?.abort();
     try {
       await apiClient.investigate.sendDecision(hitlState.threadId, { approved: false });
     } catch (e) {

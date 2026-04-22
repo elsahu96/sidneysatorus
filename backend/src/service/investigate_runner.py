@@ -28,16 +28,24 @@ def _on_progress(agent_name: str) -> None:
     print(f"PROGRESS:{agent_name}", flush=True)
 
 
-_HITL_CONTENT_LIMIT = 50_000   # chars — cap per-field to keep the stdout line under 10 MB
-_HITL_SOURCES_LIMIT = 60       # max sources to include in the HITL payload
+_HITL_CONTENT_LIMIT = (
+    50_000  # chars — cap per-field to keep the stdout line under 10 MB
+)
+_HITL_SOURCES_LIMIT = 60  # max sources to include in the HITL payload
 
 
 def _truncate_hitl(data: dict) -> dict:
     """Trim large fields so the serialised HITL line stays well inside the stream limit."""
     out = dict(data)
-    if isinstance(out.get("content"), str) and len(out["content"]) > _HITL_CONTENT_LIMIT:
+    if (
+        isinstance(out.get("content"), str)
+        and len(out["content"]) > _HITL_CONTENT_LIMIT
+    ):
         out["content"] = out["content"][:_HITL_CONTENT_LIMIT] + "\n\n[truncated]"
-    if isinstance(out.get("sources"), list) and len(out["sources"]) > _HITL_SOURCES_LIMIT:
+    if (
+        isinstance(out.get("sources"), list)
+        and len(out["sources"]) > _HITL_SOURCES_LIMIT
+    ):
         out["sources"] = out["sources"][:_HITL_SOURCES_LIMIT]
     return out
 
@@ -60,6 +68,7 @@ def main() -> None:
     args = parser.parse_args()
 
     from dotenv import load_dotenv
+
     load_dotenv()
 
     try:
@@ -78,6 +87,7 @@ def main() -> None:
         )
     except Exception as exc:
         import traceback
+
         traceback.print_exc(file=sys.stderr)  # full traceback → Cloud Run logs
         print(f"ERROR:Investigation engine error: {exc}", flush=True)
         sys.exit(1)

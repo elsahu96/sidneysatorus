@@ -179,9 +179,7 @@ async def _run_investigation(
     await proc.wait()
 
     if cancelled:
-        await event_queue.put(
-            {"type": "error", "detail": "Investigation stopped by user"}
-        )
+        await event_queue.put({"type": "stopped"})
         return
 
     if proc.returncode != 0:
@@ -308,7 +306,7 @@ async def stream_investigation(thread_id: str, user=Depends(verify_token)):
                         event_queue.get(), timeout=_SSE_HEARTBEAT_INTERVAL
                     )
                     yield f"data: {json.dumps(event)}\n\n"
-                    if event.get("type") in ("completed", "error"):
+                    if event.get("type") in ("completed", "error", "stopped"):
                         _event_queues.pop(thread_id, None)
                         _hitl_decision_queues.pop(thread_id, None)
                         return
