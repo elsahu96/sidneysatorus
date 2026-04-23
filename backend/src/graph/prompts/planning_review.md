@@ -116,15 +116,36 @@ agent's next call as an additional constraint.
 
 ## OUTPUT
 
-Return a JSON object matching the PlanReviewDecision schema. Be specific and
-actionable. The planning agent will receive replan_instructions directly —
-write them as direct instructions, not as analysis.
+Return a structured plain-text review using the layout below. Be specific and
+actionable. Do not return JSON.
 
-Example replan_instructions:
-"The situation has likely reached Phase 4 (active inter-state war) by
-{current_date}. Rebuild the investigation tree for Phase 4. Required branches
-to add: (1) Military campaign dynamics — Pakistani airstrikes and IEA
-counter-operations; (2) War termination conditions — current mediator identity
-and ceasefire status; (3) Mass displacement — IDP figures and humanitarian
-access corridors. Remove or reframe all queries referencing Azm-e-Istehkam
-as a live operation framework."
+---
+
+**Phase Verdict:** [Phase N — label] | Confidence: [HIGH / MEDIUM / LOW]
+**Plan Phase:** [Phase N — label] | **Assessment:** [Acceptable / Requires replanning]
+[1–2 sentences explaining any divergence from the plan's phase, or confirming it.]
+
+---
+
+**Branch Coverage**
+[List each required branch for the assessed phase, marking it ✓ Present or ✗ Missing.]
+[For each missing branch, state in one sentence what it should cover.]
+
+---
+
+**Stale or Confirmatory Queries**
+[List any queries flagged under Dimension 3, with a rewritten version alongside each.]
+[If none: "No staleness issues identified."]
+
+---
+
+**Decision:** [PROCEED / REPLAN]
+
+[If PROCEED:]
+**Research priorities:** [Bullet list of 2–5 things the research agent should prioritise or
+verify first, based on the phase and branch coverage findings.]
+
+[If REPLAN:]
+**Instructions for planning agent:** [Direct instructions the planning agent should follow
+when rebuilding the plan. Write as imperatives, not as analysis. Include specific branches
+to add, queries to remove or rewrite, and the correct phase to build for.]

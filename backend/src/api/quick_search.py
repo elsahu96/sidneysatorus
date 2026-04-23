@@ -17,13 +17,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from src.graph.prompts.prompts import QUICK_RESEARCH_AGENT_PROMPT
+from src.graph.prompts.prompts import QUICK_SEARCH_RESEARCH_AGENT_PROMPT
 from src.service.auth import verify_token
 
 app = APIRouter()
 logger = logging.getLogger(__name__)
 _GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-3-flash-preview")
+_MODEL_NAME = os.getenv("ANTHROPIC_MODEL_NAME", "claude-opus-4-7")
 
 
 def _model_name_for_genai(name: str) -> str:
@@ -55,7 +55,7 @@ async def quick_search(
             client = genai.Client(api_key=_GEMINI_API_KEY)
             model = _model_name_for_genai(_MODEL_NAME)
 
-            system_prompt = QUICK_RESEARCH_AGENT_PROMPT.format(
+            system_prompt = QUICK_SEARCH_RESEARCH_AGENT_PROMPT.format(
                 current_date=date.today().isoformat()
             )
 

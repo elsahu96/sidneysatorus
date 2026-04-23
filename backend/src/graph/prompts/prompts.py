@@ -19,7 +19,7 @@ def format_prompt(prompt: str, **kwargs) -> str:
 
 PLANNING_AGENT_PROMPT = _load_md_prompt("planning_agent.md")
 PLAN_REVIEWER_AGENT_PROMPT = _load_md_prompt("planning_review.md")
-
+ANALYSIS_AGENT_PROMPT = _load_md_prompt("analysis_agent.md")
 RESEARCH_AGENT_PROMPT = _load_md_prompt("research_agent.md")
 WRITER_AGENT_PROMPT = _load_md_prompt("writer_agent.md")
 QUICK_SEARCH_PLANNING_AGENT_PROMPT = _load_md_prompt("quick_planning_agent.md")

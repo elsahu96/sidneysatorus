@@ -2,6 +2,7 @@ import ast
 import json
 import logging
 import os
+import time
 import uuid
 from dotenv import load_dotenv
 
@@ -19,7 +20,8 @@ from src.graph.agents import (
     planning_subagent,
     planning_reviewer_subagent,
     research_subagent,
-    writer_subagent,
+    analysis_subagent,
+    call_writer,
 )
 
 # ── Logging (replaces raw print for non-interactive output) ─────────────────
@@ -29,9 +31,69 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME")
+_RATE_LIMIT_RETRIES = 5
+_RATE_LIMIT_BASE_DELAY = 65  # seconds; must exceed the 1-minute token bucket window
+
+
+def _invoke_with_retry(runnable, input_: dict, config: dict | None = None) -> dict:
+    """Invoke a runnable, retrying on 429 rate-limit errors with exponential backoff."""
+    delay = _RATE_LIMIT_BASE_DELAY
+    for attempt in range(_RATE_LIMIT_RETRIES):
+        try:
+            return (
+                runnable.invoke(input_, config=config)
+                if config
+                else runnable.invoke(input_)
+            )
+        except Exception as exc:
+            msg = str(exc)
+            is_rate_limit = (
+                "429" in msg or "rate_limit_error" in msg or "rate limit" in msg.lower()
+            )
+            if is_rate_limit and attempt < _RATE_LIMIT_RETRIES - 1:
+                logger.warning(
+                    "Rate limit hit (attempt %d/%d), retrying in %ds: %s",
+                    attempt + 1,
+                    _RATE_LIMIT_RETRIES,
+                    delay,
+                    msg[:120],
+                )
+                time.sleep(delay)
+                delay = min(delay * 2, 300)
+            else:
+                raise
+    raise RuntimeError("Unreachable")  # pragma: no cover
+
+
+def _call_with_retry(fn, *args, **kwargs):
+    """Call a plain function, retrying on 429 rate-limit errors."""
+    delay = _RATE_LIMIT_BASE_DELAY
+    for attempt in range(_RATE_LIMIT_RETRIES):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as exc:
+            msg = str(exc)
+            is_rate_limit = (
+                "429" in msg or "rate_limit_error" in msg or "rate limit" in msg.lower()
+            )
+            if is_rate_limit and attempt < _RATE_LIMIT_RETRIES - 1:
+                logger.warning(
+                    "Rate limit hit (attempt %d/%d), retrying in %ds: %s",
+                    attempt + 1,
+                    _RATE_LIMIT_RETRIES,
+                    delay,
+                    msg[:120],
+                )
+                time.sleep(delay)
+                delay = min(delay * 2, 300)
+            else:
+                raise
+    raise RuntimeError("Unreachable")  # pragma: no cover
+
+
+MODEL_NAME = os.environ.get("ANTHROPIC_MODEL_NAME")
 if not MODEL_NAME:
-    raise EnvironmentError("GEMINI_MODEL_NAME is not set in environment")
+    raise EnvironmentError("ANTHROPIC_MODEL_NAME is not set in environment")
 
 quick_checkpointer = MemorySaver()
 # Quick-search agent: planning (knowledge-only) → writer. No AskNews, no HITL.
@@ -144,8 +206,14 @@ def _last_message_content(result: dict) -> str:
     return ""
 
 
-def _call_hitl(on_hitl, agent: str, content_type: str, content: str,
-               editable: bool, sources: list | None = None) -> dict | None:
+def _call_hitl(
+    on_hitl,
+    agent: str,
+    content_type: str,
+    content: str,
+    editable: bool,
+    sources: list | None = None,
+) -> dict | None:
     """
     Call on_hitl and return the decision dict, or None if user rejected.
 
@@ -205,8 +273,8 @@ def run_pipeline_stages(
     if on_progress:
         on_progress("planning-agent")
     logger.info("Pipeline: running planning-agent")
-    planning_result = planning_subagent["runnable"].invoke(
-        {"messages": [HumanMessage(content=task)]}
+    planning_result = _invoke_with_retry(
+        planning_subagent["runnable"], {"messages": [HumanMessage(content=task)]}
     )
     plan_text = _last_message_content(planning_result)
     logger.info("Pipeline: planning-agent done, plan_len=%d", len(plan_text))
@@ -216,29 +284,14 @@ def run_pipeline_stages(
         return None
     plan_text = decision.get("edited_content") or plan_text
 
-    # ── Stage 2: Plan review ─────────────────────────────────────────────
-    if on_progress:
-        on_progress("planning-reviewer-agent")
-    logger.info("Pipeline: running planning-reviewer-agent")
-    reviewer_input = f"Original task:\n{task}\n\nProposed investigation plan:\n{plan_text}"
-    reviewer_result = planning_reviewer_subagent["runnable"].invoke(
-        {"messages": [HumanMessage(content=reviewer_input)]}
-    )
-    reviewed_plan = _last_message_content(reviewer_result)
-    logger.info("Pipeline: planning-reviewer-agent done, plan_len=%d", len(reviewed_plan))
-
-    decision = _call_hitl(on_hitl, "planning-reviewer-agent", "plan", reviewed_plan, editable=True)
-    if decision is None:
-        return None
-    reviewed_plan = decision.get("edited_content") or reviewed_plan
-
-    # ── Stage 3: Research ────────────────────────────────────────────────
+    # ── Stage 2: Research ────────────────────────────────────────────────
     if on_progress:
         on_progress("research-agent")
     logger.info("Pipeline: running research-agent")
-    research_input = f"Task:\n{task}\n\nApproved investigation plan:\n{reviewed_plan}"
-    research_result = research_subagent["runnable"].invoke(
-        {"messages": [HumanMessage(content=research_input)]}
+    research_input = f"Task:\n{task}\n\nApproved investigation plan:\n{plan_text}"
+    research_result = _invoke_with_retry(
+        research_subagent["runnable"],
+        {"messages": [HumanMessage(content=research_input)]},
     )
     articles = _collect_articles_from_tool_messages(research_result.get("messages", []))
     research_summary = _last_message_content(research_result)
@@ -254,23 +307,58 @@ def run_pipeline_stages(
         for a in articles
     ]
     decision = _call_hitl(
-        on_hitl, "research-agent", "sources", research_summary,
-        editable=False, sources=hitl_sources,
+        on_hitl,
+        "research-agent",
+        "sources",
+        research_summary,
+        editable=False,
+        sources=hitl_sources,
     )
     if decision is None:
         return None
 
+    # ── Stage 3: Analysis ──────────────────────────────────────────────────
+    if on_progress:
+        on_progress("analysis-agent")
+    logger.info("Pipeline: running analysis-agent")
+    analysis_input = f"Task:\n{task}\n\nResearch findings:\n{json.dumps(articles, ensure_ascii=False)}"
+    analysis_result = _invoke_with_retry(
+        analysis_subagent["runnable"],
+        {"messages": [HumanMessage(content=analysis_input)]},
+        config={"recursion_limit": 10},
+    )
+    analysis_summary = _last_message_content(analysis_result)
+    logger.info("Pipeline: analysis-agent done, summary_len=%d", len(analysis_summary))
+
     # ── Stage 4: Writer ──────────────────────────────────────────────────
     if on_progress:
         on_progress("writer-agent")
-    logger.info("Pipeline: running writer-agent, articles=%d", len(articles))
+    # Cap articles at 20. Strip content/site_rank fields — the writer only needs
+    # citation metadata (header, url, date, summary). Full content was already
+    # synthesised by the analysis agent and sending it again inflates context
+    # by ~50-100k tokens for no benefit.
+    _CITATION_FIELDS = {
+        "header",
+        "url",
+        "unix_timestamp",
+        "summary",
+        "countrycode",
+        "language",
+    }
+    writer_articles = [
+        {k: v for k, v in a.items() if k in _CITATION_FIELDS} for a in articles[:20]
+    ]
+    logger.info(
+        "Pipeline: running writer-agent, articles=%d, analysis_len=%d",
+        len(writer_articles),
+        len(analysis_summary),
+    )
     writer_input = (
         f"Task:\n{task}\n\n"
-        f"Research findings (articles):\n{json.dumps(articles, ensure_ascii=False)}"
+        f"Analysis summary:\n{analysis_summary}\n\n"
+        f"Research articles (for citations):\n{json.dumps(writer_articles, ensure_ascii=False)}"
     )
-    writer_subagent["runnable"].invoke(
-        {"messages": [HumanMessage(content=writer_input)]}
-    )
+    _call_with_retry(call_writer, writer_input)
 
     json_path = _last_write_result.get("json_path")
     if json_path:
