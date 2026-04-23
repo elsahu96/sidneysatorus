@@ -11,7 +11,7 @@ from deepagents.graph import create_deep_agent
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langgraph.checkpoint.memory import MemorySaver
 
-from src.graph.tools.asknews import clear_grading_cache
+from src.graph.tools.asknews import clear_grading_cache, get_articles_for_grading
 from src.graph.tools.writer import _last_write_result
 
 from src.graph.agents import (
@@ -236,6 +236,100 @@ def _call_hitl(
     return decision
 
 
+def _grade_and_patch_report(json_path: str, articles: list[dict]) -> None:
+    """
+    Run the grading pipeline on collected AskNews articles and inject grade data
+    into the saved report JSON for every source whose URL matches a graded article.
+
+    Grade fields added to each source dict:
+        grade             – letter grade (A+, A, B+, B, C, D)
+        composite_score   – 0-100 numeric score
+        factor_scores     – dict of the six individual factor scores
+        analyst_signals   – list of {text, sentiment} analyst bullets
+
+    Unmatched sources receive a minimal grade stub (grade="C", composite_score=0).
+    This function never raises; all errors are logged.
+    """
+    import json as _json
+    import pathlib as _pathlib
+
+    try:
+        from src.graph.grading import grade_articles
+        from src.graph.grading.config import INVESTIGATION_PROFILE_MAP
+        from src.graph.grading.data_loaders import normalize_domain
+    except ImportError as exc:
+        logger.warning("Grading module not available — skipping source grading: %s", exc)
+        return
+
+    if not articles:
+        logger.info("No articles to grade.")
+        return
+
+    try:
+        report_path = _pathlib.Path(json_path)
+        report_data = _json.loads(report_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        logger.warning("Could not read report JSON for grading patch: %s", exc)
+        return
+
+    investigation_type = report_data.get("metadata", {}).get("investigation_type", "")
+    profile = INVESTIGATION_PROFILE_MAP.get(investigation_type, "default")
+    logger.info(
+        "Grading %d articles with profile '%s' (investigation_type=%s)",
+        len(articles), profile, investigation_type,
+    )
+
+    try:
+        graded = grade_articles(articles, profile=profile)
+    except Exception as exc:
+        logger.warning("grade_articles failed — report sources will not have grades: %s", exc)
+        return
+
+    url_to_grade: dict[str, dict] = {}
+    domain_to_grade: dict[str, dict] = {}
+    for art in graded:
+        grade_data = {
+            "grade": art.get("grade", "C"),
+            "composite_score": art.get("composite_score", 0),
+            "factor_scores": art.get("factor_scores", {}),
+            "analyst_signals": art.get("analyst_signals", []),
+            "source_name": art.get("source_name", ""),
+        }
+        art_url = art.get("url", "")
+        if art_url:
+            url_to_grade[art_url] = grade_data
+        art_domain = normalize_domain(art_url)
+        if art_domain and art_domain not in domain_to_grade:
+            domain_to_grade[art_domain] = grade_data
+
+    sources = report_data.get("report", {}).get("sources", [])
+    patched = 0
+    for source in sources:
+        src_url = source.get("url", "")
+        grade_data = url_to_grade.get(src_url)
+        if grade_data is None:
+            src_domain = normalize_domain(src_url)
+            grade_data = domain_to_grade.get(src_domain)
+        if grade_data:
+            source.update(grade_data)
+            patched += 1
+        else:
+            source.setdefault("grade", "C")
+            source.setdefault("composite_score", 0)
+            source.setdefault("factor_scores", {})
+            source.setdefault("analyst_signals", [])
+
+    try:
+        report_path.write_text(
+            _json.dumps(report_data, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        logger.info(
+            "Grading patch complete: %d/%d sources matched and graded.", patched, len(sources)
+        )
+    except Exception as exc:
+        logger.warning("Could not write graded report JSON: %s", exc)
+
+
 def run_pipeline_stages(
     task: str,
     thread_id: str,
@@ -363,6 +457,15 @@ def run_pipeline_stages(
     json_path = _last_write_result.get("json_path")
     if json_path:
         logger.info("Pipeline: report written to %s", json_path)
+        # ── Stage 5: Source grading ─────────────────────────────────────
+        # Use the full-field article cache (page_rank, key_points, etc.)
+        # rather than the lean citation dicts sent to the writer.
+        if on_progress:
+            on_progress("grading-sources")
+        grading_articles = get_articles_for_grading(
+            [a.get("url", "") for a in articles]
+        )
+        _grade_and_patch_report(json_path, grading_articles)
     else:
         logger.warning("Pipeline: writer-agent did not produce a json_path")
     return json_path
