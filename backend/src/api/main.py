@@ -25,6 +25,7 @@ def _cors_allow_origins() -> list[str]:
     raw = os.getenv("FRONTEND_URL") or "http://localhost:4567"
     return [o.strip() for o in raw.split(",") if o.strip()]
 
+
 # On Cloud Run: GOOGLE_APPLICATION_CREDENTIALS is not set — use ADC (the revision's service account).
 # Locally: point GOOGLE_APPLICATION_CREDENTIALS at your Firebase service-account JSON and it is used instead.
 _firebase_cred_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
@@ -37,17 +38,24 @@ else:
 async def _run_migrations() -> None:
     """Apply pending Prisma migrations. Logs a warning on failure but does not block startup."""
     import asyncio
+
     try:
         proc = await asyncio.create_subprocess_exec(
-            "prisma", "migrate", "deploy", "--schema=prisma/schema.prisma",
+            "prisma",
+            "migrate",
+            "deploy",
+            "--schema=prisma/schema.prisma",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
         )
         stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=60)
         if proc.returncode == 0:
             logger.info("Prisma migrations applied successfully")
+            await asyncio.sleep(1)
         else:
-            logger.warning("Prisma migrate deploy exited %d: %s", proc.returncode, stdout.decode())
+            logger.warning(
+                "Prisma migrate deploy exited %d: %s", proc.returncode, stdout.decode()
+            )
     except asyncio.TimeoutError:
         logger.warning("Prisma migrate deploy timed out — skipping")
     except Exception as exc:
@@ -68,11 +76,14 @@ app = FastAPI(title="Sidney Backend API", version="1.0.0", lifespan=lifespan)
 @app.exception_handler(Exception)
 async def prisma_engine_error_handler(request: Request, exc: Exception) -> JSONResponse:
     from prisma.engine.errors import EngineConnectionError
+
     if isinstance(exc, EngineConnectionError):
         logger.error("Database unavailable: %s", exc)
         return JSONResponse(
             status_code=503,
-            content={"detail": "Database unavailable. Check that the Cloud SQL Auth Proxy is running."},
+            content={
+                "detail": "Database unavailable. Check that the Cloud SQL Auth Proxy is running."
+            },
         )
     # Returning a JSONResponse (instead of re-raising) keeps the response flowing back through
     # CORSMiddleware so the browser receives Access-Control-Allow-Origin even on unexpected 500s.
@@ -129,7 +140,7 @@ async def websocket_endpoint(websocket: WebSocket, task_id: str):
     await websocket.send_json({"status": "connected", "task_id": task_id})
 
     try:
-        timeout = 60  
+        timeout = 60
         elapsed = 0
 
         while elapsed < timeout:

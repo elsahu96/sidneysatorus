@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 # ── Users ─────────────────────────────────────────────────────────────────────
 
+
 async def create_or_get_user(
     db: Prisma,
     firebase_uid: str,
@@ -28,6 +29,7 @@ async def create_or_get_user(
     name: str | None = None,
 ) -> dict[str, Any]:
     """Upsert a user by Firebase UID. Returns the user record as a dict."""
+    logger.info(f"Checking connection status: {db.is_connected()}")
     user = await db.user.find_unique(where={"firebaseUid": firebase_uid})
     if user:
         return user.model_dump()
@@ -43,12 +45,15 @@ async def create_or_get_user(
     return user.model_dump()
 
 
-async def get_user_by_firebase_uid(db: Prisma, firebase_uid: str) -> dict[str, Any] | None:
+async def get_user_by_firebase_uid(
+    db: Prisma, firebase_uid: str
+) -> dict[str, Any] | None:
     user = await db.user.find_unique(where={"firebaseUid": firebase_uid})
     return user.model_dump() if user else None
 
 
 # ── Teams ─────────────────────────────────────────────────────────────────────
+
 
 async def create_team_with_owner(
     db: Prisma,
@@ -86,11 +91,14 @@ async def get_or_create_team_for_user(
     teams = await get_teams_for_user(db, db_user["id"])
     if teams:
         return teams[0]["id"]
-    team = await create_team_with_owner(db, team_name=f"{email}'s Team", owner_id=db_user["id"])
+    team = await create_team_with_owner(
+        db, team_name=f"{email}'s Team", owner_id=db_user["id"]
+    )
     return team["id"]
 
 
 # ── Case Files ─────────────────────────────────────────────────────────────────
+
 
 async def create_case_file(
     db: Prisma,
@@ -182,6 +190,7 @@ async def delete_case_file(db: Prisma, case_id: str) -> bool:
 
 # ── Folders ────────────────────────────────────────────────────────────────────
 
+
 async def create_folder(
     db: Prisma,
     team_id: str,
@@ -224,6 +233,7 @@ async def delete_folder(db: Prisma, folder_id: str) -> bool:
 
 
 # ── Projects ──────────────────────────────────────────────────────────────────
+
 
 async def create_project(
     db: Prisma,
@@ -276,6 +286,7 @@ async def delete_project(db: Prisma, project_id: str) -> bool:
 
 # ── Project Documents ─────────────────────────────────────────────────────────
 
+
 async def create_project_document(
     db: Prisma,
     project_id: str,
@@ -304,6 +315,7 @@ async def delete_project_document(db: Prisma, doc_id: str) -> bool:
 # ── Chat Sessions & Messages ──────────────────────────────────────────────────
 # Low-level CRUD helpers.  Business logic (sliding window, archival) lives in
 # src/service/chat_session_service.py — use ChatSessionService from there.
+
 
 async def get_or_create_chat_session(db: Prisma, session_id: str) -> dict[str, Any]:
     """Upsert a bare session by ID (no user, no title). Legacy helper."""
