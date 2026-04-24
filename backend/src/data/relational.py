@@ -24,12 +24,13 @@ class RelationalDB:
             try:
                 await self._client.connect()
                 self._connected = True
-                logger.info("RelationalDB connected")
+                logger.info("Successfully connected to Prisma engine")
             except Exception as e:
                 if "Already connected" in str(e):
-                    pass
-                else:
-                    raise e
+                    logger.info("Prisma already connected, ignoring error")
+                    return
+                logger.error(f"Prisma connection error: {e}")
+                raise e
 
     async def disconnect(self) -> None:
         if self._connected:
