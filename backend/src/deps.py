@@ -21,7 +21,9 @@ async def get_db(factory: DataFactory = Depends(get_data_factory)) -> Prisma:
         raise
 
 
-async def get_db_optional(factory: DataFactory = Depends(get_data_factory)) -> Prisma | None:
+async def get_db_optional(
+    factory: DataFactory = Depends(get_data_factory),
+) -> Prisma | None:
     """
     Like get_db but returns None instead of raising 503 when the DB is unavailable.
     Use for read-only list endpoints that should degrade gracefully (e.g. sidebar session list).
