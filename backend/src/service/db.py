@@ -39,7 +39,7 @@ async def create_or_get_user(
             "name": name,
         }
     )
-    logger.info("Created user id=%s firebase_uid=%s", user.id, firebase_uid)
+    logger.info("Created user id=%s firebaseUid=%s", user.id, firebase_uid)
     return user.model_dump()
 
 

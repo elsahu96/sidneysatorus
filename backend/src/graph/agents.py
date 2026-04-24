@@ -24,9 +24,10 @@ from src.graph.prompts.prompts import (
 )
 
 _MODEL_NAME = os.environ.get("CLAUDE_OPUS_4_6", "claude-opus-4-6")
-# Writer uses a lighter/faster model — set WRITER_MODEL_NAME in .env to override.
-# Recommended: a Haiku or Sonnet variant (e.g. claude-haiku-4-6).
-_WRITER_MODEL_NAME = os.environ.get("CLAUDE_HAIKU_4_6", _MODEL_NAME)
+# Set WRITER_MODEL_NAME in .env to a lighter model once you confirm its Vertex
+# model ID is provisioned on this project (e.g. a Haiku or Sonnet variant).
+# Defaults to the main model so the pipeline always works out of the box.
+_WRITER_MODEL_NAME = os.environ.get("CLAUDE_HAIKU_4_5", _MODEL_NAME)
 _GEMINI_MODEL_NAME = os.environ.get(
     "GEMINI_3_1_PRO_PREVIEW", "google_genai:gemini-3.1-pro-preview"
 )
