@@ -229,7 +229,7 @@ ERROR:{message}             → { type: "error", detail: string }
 ### Data Model (Prisma)
 
 ```
-User         — firebase_uid, email, team
+User         — firebaseUid, email, team
 Team         — id, name
 CaseFile     — id, teamId, caseNumber (= GCS file stem), subject, messages, category, createdAt
 Folder       — id, teamId, name

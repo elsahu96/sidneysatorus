@@ -87,7 +87,7 @@ Per-article signals returned by the AskNews API at query time. The grading-relev
 
 ### Layer 3: Gemini Runtime Analysis
 
-Three LLM calls are made per grading run, using the model specified by `ANTHROPIC_MODEL_NAME` in `.env`.
+Three LLM calls are made per grading run, using the model specified in `.env`.
 
 **Attribution Classification** (`attribution.py`)
 Each article's `key_points` are sent to Gemini with a classification prompt. The model identifies the highest-quality attribution type present:

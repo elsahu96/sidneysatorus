@@ -1,9 +1,6 @@
-// Prisma schema — PostgreSQL on GCP Cloud SQL
-// Docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider             = "prisma-client-py"
-  recursive_type_depth = 5
+  recursive_type_depth = "5"
 }
 
 datasource db {
@@ -11,18 +8,18 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
 model ChatSession {
   id            String    @id @default(cuid())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
   userId        String?   @map("user_id")
   title         String    @default("")
   summary       String?
-  contextWindow Json?     @map("context_window")  // Hot cache: last N messages as JSONB
-  blobPointer   String?   @map("blob_pointer")    // URI to full archive in GCS/local
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  contextWindow Json?     @map("context_window")
+  blobPointer   String?   @map("blob_pointer")
+  user          User?     @relation(fields: [userId], references: [id])
   messages      Message[]
-  user          User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
   @@index([userId])
   @@map("chat_sessions")
 }
@@ -30,30 +27,32 @@ model ChatSession {
 model Message {
   id            String      @id @default(cuid())
   role          MessageRole
-  messageType   MessageType @default(TEXT) @map("message_type")
-  content       String      // For TEXT: full text. For REPORT: display title only.
-  reportRef     String?     @map("report_ref")  // Report ID or GCS path for REPORT messages
+  content       String
   metadata      Json?
-  tokenCount    Int?        @map("token_count")
   createdAt     DateTime    @default(now())
   chatSessionId String
+  tokenCount    Int?        @map("token_count")
+  messageType   MessageType @default(TEXT) @map("message_type")
+  reportRef     String?     @map("report_ref")
   session       ChatSession @relation(fields: [chatSessionId], references: [id], onDelete: Cascade)
+
   @@index([chatSessionId, createdAt])
   @@map("messages")
 }
 
 model User {
-  id             String   @id @default(cuid())
-  firebaseUid    String?  @unique @map("firebase_uid")  // Firebase UID (JWT sub)
+  id             String           @id @default(cuid())
+  firebaseUid    String?          @unique @map("firebase_uid")
   email          String
   name           String?
   username       String?
-  phash          String?  @db.VarChar(255)
+  phash          String?          @db.VarChar(255)
   subscriptionId String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  memberships    TeamMembership[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
   chatSessions   ChatSession[]
+  memberships    TeamMembership[]
+
   @@map("users")
 }
 
@@ -62,10 +61,11 @@ model Team {
   name        String
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
-  memberships TeamMembership[]
   caseFiles   CaseFile[]
   folders     Folder[]
   projects    Project[]
+  memberships TeamMembership[]
+
   @@map("teams")
 }
 
@@ -78,10 +78,11 @@ model CaseFile {
   folderId   String?  @map("folder_id")
   category   String?  @db.VarChar(64)
   projectId  String?  @map("project_id")
-  messages   Json     // [{ role, content, ... }]
+  messages   Json
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   team       Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
   @@index([teamId])
   @@index([teamId, folderId])
   @@index([projectId])
@@ -97,6 +98,7 @@ model Folder {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
   @@index([teamId])
   @@map("folders")
 }
@@ -107,10 +109,11 @@ model Project {
   name        String
   description String?
   timestamp   DateTime          @default(now())
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  team        Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
   documents   ProjectDocument[]
+  team        Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
   @@index([teamId])
   @@map("projects")
 }
@@ -121,11 +124,12 @@ model ProjectDocument {
   name       String
   size       Int      @default(0)
   type       String   @db.VarChar(128)
-  storageKey String   @map("storage_key") // S3 key: team_id/...
+  storageKey String   @map("storage_key")
   uploadedAt DateTime @default(now()) @map("uploaded_at")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
   @@index([projectId])
   @@map("project_documents")
 }
@@ -134,10 +138,11 @@ model TeamMembership {
   id        String   @id @default(cuid())
   teamId    String   @map("team_id")
   userId    String   @map("user_id")
-  role      String   @default("MEMBER")  // OWNER | MEMBER
+  role      String   @default("MEMBER")
   createdAt DateTime @default(now())
   team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([teamId, userId])
   @@index([userId])
   @@index([teamId])
