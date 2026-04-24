@@ -9,6 +9,7 @@ from prisma import Prisma
 logger = logging.getLogger(__name__)
 load_dotenv()
 
+
 class RelationalDB:
     """Wraps the Prisma client with explicit connect/disconnect lifecycle."""
 
@@ -17,11 +18,19 @@ class RelationalDB:
         self._connected = False
 
     async def connect(self) -> None:
-        if not self._connected:
-            await self._client.connect()
-            self._connected = True
-            logger.info("RelationalDB connected")
-    
+        if self._client.is_connected():
+            return
+        else:
+            try:
+                await self._client.connect()
+                self._connected = True
+                logger.info("RelationalDB connected")
+            except Exception as e:
+                if "Already connected" in str(e):
+                    pass
+                else:
+                    raise e
+
     async def disconnect(self) -> None:
         if self._connected:
             await self._client.disconnect()
