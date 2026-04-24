@@ -91,9 +91,9 @@ def _call_with_retry(fn, *args, **kwargs):
     raise RuntimeError("Unreachable")  # pragma: no cover
 
 
-MODEL_NAME = os.environ.get("ANTHROPIC_MODEL_NAME")
+MODEL_NAME = os.environ.get("CLAUDE_OPUS_4_6")
 if not MODEL_NAME:
-    raise EnvironmentError("ANTHROPIC_MODEL_NAME is not set in environment")
+    raise EnvironmentError("CLAUDE_OPUS_4_6 is not set in environment")
 
 quick_checkpointer = MemorySaver()
 # Quick-search agent: planning (knowledge-only) → writer. No AskNews, no HITL.
@@ -258,7 +258,9 @@ def _grade_and_patch_report(json_path: str, articles: list[dict]) -> None:
         from src.graph.grading.config import INVESTIGATION_PROFILE_MAP
         from src.graph.grading.data_loaders import normalize_domain
     except ImportError as exc:
-        logger.warning("Grading module not available — skipping source grading: %s", exc)
+        logger.warning(
+            "Grading module not available — skipping source grading: %s", exc
+        )
         return
 
     if not articles:
@@ -276,13 +278,17 @@ def _grade_and_patch_report(json_path: str, articles: list[dict]) -> None:
     profile = INVESTIGATION_PROFILE_MAP.get(investigation_type, "default")
     logger.info(
         "Grading %d articles with profile '%s' (investigation_type=%s)",
-        len(articles), profile, investigation_type,
+        len(articles),
+        profile,
+        investigation_type,
     )
 
     try:
         graded = grade_articles(articles, profile=profile)
     except Exception as exc:
-        logger.warning("grade_articles failed — report sources will not have grades: %s", exc)
+        logger.warning(
+            "grade_articles failed — report sources will not have grades: %s", exc
+        )
         return
 
     url_to_grade: dict[str, dict] = {}
@@ -324,7 +330,9 @@ def _grade_and_patch_report(json_path: str, articles: list[dict]) -> None:
             _json.dumps(report_data, ensure_ascii=False, indent=2), encoding="utf-8"
         )
         logger.info(
-            "Grading patch complete: %d/%d sources matched and graded.", patched, len(sources)
+            "Grading patch complete: %d/%d sources matched and graded.",
+            patched,
+            len(sources),
         )
     except Exception as exc:
         logger.warning("Could not write graded report JSON: %s", exc)

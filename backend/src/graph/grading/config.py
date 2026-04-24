@@ -260,5 +260,5 @@ SPECIALIST_VERTICAL_BOOST = 15
 # ── LLM model for grading calls ─────────────────────────────────────────────
 
 GRADING_LLM_MODEL = os.environ.get(
-    "GEMINI_MODEL_NAME", "google_genai:gemini-3-flash-preview"
+    "GEMINI_3_1_PRO_PREVIEW", "google_genai:gemini-3-flash-preview"
 )
