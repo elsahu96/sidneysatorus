@@ -1,5 +1,6 @@
 import React, { useRef } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 import { CitationPopover } from "@/components/CitationPopover";
 import { InvestigationReferences } from "@/components/InvestigationReferences";
@@ -92,12 +93,11 @@ export function ReportContent({
     });
   }
 
-  // For ReactMarkdown display: escape [n] so the markdown parser treats them as
-  // plain text nodes (not unresolved link references), allowing processText to
-  // intercept them and render CitationPopovers. The PDF uses processedContent
-  // unchanged so citations appear as [n] in the exported document.
+  // For ReactMarkdown display: escape [n] and [n, m, ...] so the markdown parser
+  // treats them as plain text nodes, allowing processText to intercept them and
+  // render CitationPopovers. The PDF uses processedContent unchanged.
   const displayContent = referenceData.length > 0
-    ? processedContent.replace(/\[(\d+)\](?!\()/g, (_, n) => `\\[${n}\\]`)
+    ? processedContent.replace(/\[(\d+(?:,\s*\d+)*)\](?!\()/g, (_, n) => `\\[${n}\\]`)
     : processedContent;
 
   const handleDownloadPDF = () => {
@@ -287,12 +287,19 @@ export function ReportContent({
   };
 
   const processText = (text: string, keyPrefix: string): React.ReactNode[] => {
-    // Split on [n] citation patterns (e.g. [1], [12]) detected directly at render time
-    // to avoid markdown bold-parsing of __REF_n__ placeholder tokens.
-    const parts = text.split(/(\[\d+\])/g);
+    // Split on [n] and [n, m, ...] citation patterns detected at render time.
+    const parts = text.split(/(\[\d+(?:,\s*\d+)*\])/g);
     return parts.map((part, i) => {
-      const m = part.match(/^\[(\d+)\]$/);
-      if (m) return renderCitation(parseInt(m[1], 10), `${keyPrefix}-${i}`);
+      const m = part.match(/^\[(\d+(?:,\s*\d+)*)\]$/);
+      if (m) {
+        const nums = m[1].split(",").map((s) => parseInt(s.trim(), 10));
+        if (nums.length === 1) return renderCitation(nums[0], `${keyPrefix}-${i}`);
+        return (
+          <React.Fragment key={`${keyPrefix}-${i}`}>
+            {nums.map((n, j) => renderCitation(n, `${keyPrefix}-${i}-${j}`))}
+          </React.Fragment>
+        );
+      }
       return part;
     });
   };
@@ -315,7 +322,7 @@ export function ReportContent({
   if (!enhanced) {
     return (
       <div className={cn("prose prose-sm dark:prose-invert max-w-none", className)}>
-        <ReactMarkdown>{displayContent}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{displayContent}</ReactMarkdown>
       </div>
     );
   }
@@ -336,6 +343,7 @@ export function ReportContent({
       
       <div ref={reportRef} className={cn("prose prose-invert max-w-none space-y-8", geolocations.length > 0 ? "" : "pt-12")}>
         <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
           components={{
           h1: ({ children, ...props }) => (
             <div className="border-b border-border pb-6 mb-6">

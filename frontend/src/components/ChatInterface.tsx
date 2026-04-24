@@ -2,7 +2,6 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Send, Square, Plus, Zap, Search } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
-import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { InvestigationReport } from "@/components/InvestigationReport";
@@ -337,6 +336,7 @@ export const ChatInterface = () => {
   const { addCaseFile } = useCaseFiles();
 
   const performInvestigationApi = useCallback(async (query: string) => {
+    investigateAbortRef.current = new AbortController();
     const threadId = crypto.randomUUID();
     activeThreadId.current = threadId;
     const reportMeta = await apiClient.investigate.start(query, { signal: investigateAbortRef.current?.signal });
@@ -393,6 +393,13 @@ export const ChatInterface = () => {
             }
           }
 
+          if (data.type === "stopped") {
+            stopStageCycling();
+            setHitlState(null);
+            connection.close();
+            reject(new Error("Investigation stopped by user"));
+          }
+
           if (data.type === "error" || data.status === "error") {
             stopStageCycling();
             setHitlState(null);
@@ -419,6 +426,7 @@ export const ChatInterface = () => {
 
         quickAbortRef.current = new AbortController();
 
+        estimatedSecsRef.current = 20;
         setLoadingStages(["Analysing query…"]);
 
         streamQuickSearch(
@@ -582,13 +590,18 @@ export const ChatInterface = () => {
         }
         return [{ id: reportMsgId, role: "assistant" as const, content: result.name || "Investigation Report" }];
       } catch (err: unknown) {
-        if (axios.isCancel(err)) {  
+        const isUserStop =
+          axios.isCancel(err) ||
+          (err instanceof Error &&
+            (err.message === "Investigation cancelled" ||
+              err.message === "Investigation stopped by user"));
+        if (isUserStop) {
           const id = createMessageId();
           return [
             {
               id,
               role: "assistant" as const,
-              content: "Investigation cancelled.",
+              content: "Investigation was stopped.",
             },
           ];
         }
@@ -638,6 +651,9 @@ export const ChatInterface = () => {
 
   const handleHitlReject = useCallback(async () => {
     if (!hitlState) return;
+    // Abort the SSE connection first so the backend "stopped by user" error
+    // event doesn't reach the promise rejection handler.
+    investigateAbortRef.current?.abort();
     try {
       await apiClient.investigate.sendDecision(hitlState.threadId, { approved: false });
     } catch (e) {
@@ -770,13 +786,21 @@ export const ChatInterface = () => {
     toast.success("Chat cleared");
   }, [reset]);
 
-  const handleStop = useCallback(() => {
+  const handleStop = useCallback(async () => {
     investigateAbortRef.current?.abort();
     quickAbortRef.current?.abort();
+    if (activeTaskId) {
+      try {
+        await apiClient.investigate.terminate(activeTaskId);
+      } catch {
+        // ignore — process may have already exited
+      }
+      setActiveTaskId(null);
+    }
     reset();
     setLoadingStages([]);
     toast.info("Investigation stopped");
-  }, [reset]);
+  }, [reset, activeTaskId]);
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -803,11 +827,11 @@ export const ChatInterface = () => {
       return (
         <div
           key={msg.id}
-          className="rounded-lg p-6 text-sm max-w-2xl bg-background text-foreground border border-border shadow-sm prose prose-sm dark:prose-invert max-w-none"
+          className="rounded-lg p-4 text-sm max-w-2xl bg-background text-foreground border border-border shadow-sm"
           data-message-id={msg.id}
           data-role="assistant"
         >
-          <ReactMarkdown>{attachment.reportContent}</ReactMarkdown>
+          <InvestigationApiReport content={attachment.reportContent} />
         </div>
       );
     }
